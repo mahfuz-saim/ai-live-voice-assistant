@@ -1,6 +1,8 @@
 // webrtc.js - WebRTC Screen Capture Module
 // This module handles screen capture using WebRTC and frame extraction
 
+const { desktopCapturer } = require("electron");
+
 /**
  * WebRTC Manager Class
  * Handles screen sharing, frame capture, and stream management
@@ -18,19 +20,155 @@ class WebRTCManager {
   }
 
   /**
+   * Get available screen sources using Electron's desktopCapturer
+   */
+  async getScreenSources() {
+    try {
+      console.log("Fetching screen sources from desktopCapturer...");
+
+      const sources = await desktopCapturer.getSources({
+        types: ["screen"],
+        thumbnailSize: { width: 150, height: 150 },
+        fetchWindowIcons: false,
+      });
+
+      console.log(`Found ${sources.length} screen sources`);
+
+      // Also try to get windows if no screens found
+      if (sources.length === 0) {
+        console.log("No screens found, trying to get windows...");
+        const windowSources = await desktopCapturer.getSources({
+          types: ["window"],
+          thumbnailSize: { width: 150, height: 150 },
+          fetchWindowIcons: false,
+        });
+        console.log(`Found ${windowSources.length} window sources`);
+        return windowSources;
+      }
+
+      return sources;
+    } catch (error) {
+      console.error("Error getting screen sources:", error);
+      console.error("Error details:", error.message, error.stack);
+      return [];
+    }
+  }
+
+  /**
+   * Start screen capture using Electron's desktopCapturer
+   */
+  async startCaptureWithElectron() {
+    console.log("Starting screen capture with Electron desktopCapturer...");
+
+    const sources = await this.getScreenSources();
+
+    if (sources.length === 0) {
+      throw new Error("No screen sources available from desktopCapturer");
+    }
+
+    // Log all available sources for debugging
+    sources.forEach((source, index) => {
+      console.log(
+        `Source ${index}: ${source.name} (ID: ${source.id.substring(0, 20)}...)`
+      );
+    });
+
+    // Use the first screen source (usually the primary screen)
+    const primarySource = sources[0];
+    console.log(
+      "Selected screen source:",
+      primarySource.name,
+      "ID:",
+      primarySource.id
+    );
+
+    // Request screen capture using navigator.mediaDevices with the source ID
+    const constraints = {
+      audio: false,
+      video: {
+        mandatory: {
+          chromeMediaSource: "desktop",
+          chromeMediaSourceId: primarySource.id,
+        },
+      },
+    };
+
+    console.log("Requesting media stream with constraints...");
+    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+    console.log("Media stream obtained successfully");
+    return stream;
+  }
+
+  /**
+   * Start screen capture using direct screen ID (alternative method)
+   */
+  async startCaptureWithDirectScreenId() {
+    console.log("Starting screen capture with direct screen ID...");
+
+    // Try different screen ID formats that Electron might use
+    const screenIds = [
+      "screen:0:0", // Primary screen format 1
+      "screen:1:0", // Primary screen format 2
+      "window:0:0", // Window format fallback
+    ];
+
+    for (const screenId of screenIds) {
+      try {
+        console.log(`Trying screen ID: ${screenId}`);
+        const constraints = {
+          audio: false,
+          video: {
+            mandatory: {
+              chromeMediaSource: "desktop",
+              chromeMediaSourceId: screenId,
+            },
+          },
+        };
+
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        console.log(`Success with screen ID: ${screenId}`);
+        return stream;
+      } catch (error) {
+        console.warn(`Failed with screen ID ${screenId}:`, error.message);
+      }
+    }
+
+    throw new Error("All direct screen ID attempts failed");
+  }
+
+  /**
    * Start screen capture
    * Requests permission and starts capturing the screen
+   * Tries multiple methods until one succeeds
    */
   async startCapture() {
     try {
-      // Request screen capture permission
-      this.stream = await navigator.mediaDevices.getDisplayMedia({
-        video: {
-          cursor: "always", // Include cursor in capture
-          displaySurface: "monitor", // Prefer full screen
-        },
-        audio: false, // No audio needed for screen sharing
-      });
+      console.log("Starting screen capture...");
+
+      // Try method 1: Electron's desktopCapturer
+      try {
+        this.stream = await this.startCaptureWithElectron();
+        console.log("✓ Screen capture started with Electron desktopCapturer");
+      } catch (electronError) {
+        console.warn(
+          "✗ Electron desktopCapturer failed:",
+          electronError.message
+        );
+
+        // Try method 2: Direct screen ID
+        try {
+          console.log("Trying direct screen ID method...");
+          this.stream = await this.startCaptureWithDirectScreenId();
+          console.log("✓ Screen capture started with direct screen ID");
+        } catch (directError) {
+          console.warn("✗ Direct screen ID failed:", directError.message);
+
+          // All methods failed
+          throw new Error(
+            "All screen capture methods failed. Please ensure screen capture permissions are granted to the application."
+          );
+        }
+      }
 
       // Attach stream to video element for preview
       this.videoElement.srcObject = this.stream;
@@ -57,9 +195,25 @@ class WebRTCManager {
       return true;
     } catch (error) {
       console.error("Error starting screen capture:", error);
-      alert(
-        "Failed to start screen capture. Please grant permission to share your screen."
-      );
+      console.error("Error details:", {
+        name: error.name,
+        message: error.message,
+        stack: error.stack,
+      });
+
+      let errorMessage = "Failed to start screen capture. ";
+
+      if (error.message.includes("No screen sources available")) {
+        errorMessage += "No screen sources detected.";
+      } else if (error.name === "NotAllowedError") {
+        errorMessage += "Permission denied. Please allow screen capture.";
+      } else if (error.name === "NotFoundError") {
+        errorMessage += "No screen capture device found.";
+      } else {
+        errorMessage += `Error: ${error.message}`;
+      }
+
+      alert(errorMessage);
       return false;
     }
   }

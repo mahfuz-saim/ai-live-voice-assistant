@@ -1,7 +1,7 @@
 // main.js - Electron Main Process
 // This file creates and manages the application window
 
-const { app, BrowserWindow } = require("electron");
+const { app, BrowserWindow, desktopCapturer, session } = require("electron");
 const path = require("path");
 require("dotenv").config();
 
@@ -26,6 +26,26 @@ function createWindow() {
     title: "AI Voice Assistant",
     icon: path.join(__dirname, "assets", "icon.png"), // Optional: add icon if available
   });
+
+  // Set permissions for media devices (screen capture)
+  session.defaultSession.setPermissionRequestHandler(
+    (webContents, permission, callback) => {
+      const allowedPermissions = [
+        "media",
+        "mediaKeySystem",
+        "geolocation",
+        "notifications",
+        "midiSysex",
+        "pointerLock",
+        "fullscreen",
+      ];
+      if (allowedPermissions.includes(permission)) {
+        callback(true); // Grant permission
+      } else {
+        callback(false); // Deny permission
+      }
+    }
+  );
 
   // Load the main HTML file
   mainWindow.loadFile(path.join(__dirname, "renderer", "index.html"));
@@ -52,6 +72,14 @@ function createWindow() {
  * App lifecycle: when Electron is ready, create the window
  */
 app.whenReady().then(() => {
+  // Set up permission handlers before creating window
+  session.defaultSession.setPermissionCheckHandler(
+    (webContents, permission, requestingOrigin, details) => {
+      console.log("Permission check:", permission, requestingOrigin);
+      return true; // Allow all permission checks
+    }
+  );
+
   createWindow();
 
   // macOS specific: recreate window when dock icon is clicked

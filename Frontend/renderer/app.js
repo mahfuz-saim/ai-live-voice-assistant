@@ -184,7 +184,13 @@ function handleWebSocketMessage(data) {
       }
       break;
 
+    case "frame":
+      // Frame data - ignore (we're sending these, not receiving)
+      console.log("Frame message received (ignoring)");
+      break;
+
     case "frame_received":
+    case "frame_acknowledged":
       // Frame acknowledgment (optional)
       console.log("Frame received by backend");
       break;
@@ -200,8 +206,15 @@ function handleWebSocketMessage(data) {
       console.log("Backend status:", data.message);
       break;
 
+    case "connection":
+      // Connection acknowledgment
+      console.log("Connection acknowledged by backend");
+      break;
+
     default:
-      console.log("Unknown message type:", data.type);
+      // Unknown message type - log to console only, don't show in chat
+      console.warn("Unknown message type:", data.type, data);
+      break;
   }
 }
 
