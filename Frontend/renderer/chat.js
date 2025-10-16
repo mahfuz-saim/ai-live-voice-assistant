@@ -7,16 +7,16 @@
  */
 class ChatManager {
   constructor() {
-    this.chatMessages = document.getElementById('chatMessages');
-    this.chatInput = document.getElementById('chatInput');
-    this.sendBtn = document.getElementById('sendBtn');
+    this.chatMessages = document.getElementById("chatMessages");
+    this.chatInput = document.getElementById("chatInput");
+    this.sendBtn = document.getElementById("sendBtn");
     this.messageHistory = [];
     this.ttsEnabled = true;
     this.synthesis = window.speechSynthesis;
-    
+
     // Initialize local storage for session
     this.initializeSession();
-    
+
     // Set up event listeners
     this.setupEventListeners();
   }
@@ -26,18 +26,18 @@ class ChatManager {
    */
   initializeSession() {
     try {
-      const savedSession = localStorage.getItem('aiAssistantSession');
+      const savedSession = localStorage.getItem("aiAssistantSession");
       if (savedSession) {
         const session = JSON.parse(savedSession);
         this.messageHistory = session.messages || [];
-        
+
         // Restore messages to UI (optional)
-        console.log('Session restored from local storage');
+        console.log("Session restored from local storage");
       } else {
         this.messageHistory = [];
       }
     } catch (error) {
-      console.error('Error loading session from local storage:', error);
+      console.error("Error loading session from local storage:", error);
       this.messageHistory = [];
     }
   }
@@ -50,14 +50,14 @@ class ChatManager {
       const session = {
         messages: this.messageHistory,
         timestamp: new Date().toISOString(),
-        goal: 'AI Assistant Session',
-        progress: this.messageHistory.length
+        goal: "AI Assistant Session",
+        progress: this.messageHistory.length,
       };
-      
-      localStorage.setItem('aiAssistantSession', JSON.stringify(session));
-      console.log('Session saved to local storage');
+
+      localStorage.setItem("aiAssistantSession", JSON.stringify(session));
+      console.log("Session saved to local storage");
     } catch (error) {
-      console.error('Error saving session to local storage:', error);
+      console.error("Error saving session to local storage:", error);
     }
   }
 
@@ -66,13 +66,13 @@ class ChatManager {
    */
   setupEventListeners() {
     // Send button click
-    this.sendBtn.addEventListener('click', () => {
+    this.sendBtn.addEventListener("click", () => {
       this.sendMessage();
     });
 
     // Enter key to send message
-    this.chatInput.addEventListener('keypress', (e) => {
-      if (e.key === 'Enter' && !e.shiftKey) {
+    this.chatInput.addEventListener("keypress", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
         this.sendMessage();
       }
@@ -84,19 +84,19 @@ class ChatManager {
    */
   sendMessage() {
     const message = this.chatInput.value.trim();
-    
+
     if (!message) {
       return;
     }
 
     // Display user message
-    this.addMessage(message, 'user');
+    this.addMessage(message, "user");
 
     // Send to backend via WebSocket
     window.websocketManager.sendChatMessage(message);
 
     // Clear input
-    this.chatInput.value = '';
+    this.chatInput.value = "";
 
     // Save to session
     this.saveSessionToLocalStorage();
@@ -107,12 +107,12 @@ class ChatManager {
    * @param {String} text - Message text
    * @param {String} type - Message type: 'user', 'ai', or 'system'
    */
-  addMessage(text, type = 'ai') {
+  addMessage(text, type = "ai") {
     // Create message element
-    const messageDiv = document.createElement('div');
+    const messageDiv = document.createElement("div");
     messageDiv.className = `message ${type}-message`;
-    
-    const messageParagraph = document.createElement('p');
+
+    const messageParagraph = document.createElement("p");
     messageParagraph.textContent = text;
     messageDiv.appendChild(messageParagraph);
 
@@ -126,11 +126,11 @@ class ChatManager {
     this.messageHistory.push({
       text: text,
       type: type,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
 
     // If AI message, speak it using TTS
-    if (type === 'ai' && this.ttsEnabled) {
+    if (type === "ai" && this.ttsEnabled) {
       this.speak(text);
     }
 
@@ -143,7 +143,7 @@ class ChatManager {
    * @param {String} message - AI response message
    */
   handleAIResponse(message) {
-    this.addMessage(message, 'ai');
+    this.addMessage(message, "ai");
   }
 
   /**
@@ -157,7 +157,7 @@ class ChatManager {
 
       // Create speech utterance
       const utterance = new SpeechSynthesisUtterance(text);
-      
+
       // Configure voice settings
       utterance.rate = 1.0; // Normal speed
       utterance.pitch = 1.0; // Normal pitch
@@ -165,31 +165,35 @@ class ChatManager {
 
       // Try to select a good voice (prefer English voices)
       const voices = this.synthesis.getVoices();
-      const englishVoice = voices.find(voice => 
-        voice.lang.startsWith('en') && voice.name.includes('Female')
-      ) || voices.find(voice => voice.lang.startsWith('en')) || voices[0];
-      
+      const englishVoice =
+        voices.find(
+          (voice) =>
+            voice.lang.startsWith("en") && voice.name.includes("Female")
+        ) ||
+        voices.find((voice) => voice.lang.startsWith("en")) ||
+        voices[0];
+
       if (englishVoice) {
         utterance.voice = englishVoice;
       }
 
       // Event listeners for speech
       utterance.onstart = () => {
-        console.log('TTS started');
+        console.log("TTS started");
       };
 
       utterance.onend = () => {
-        console.log('TTS finished');
+        console.log("TTS finished");
       };
 
       utterance.onerror = (event) => {
-        console.error('TTS error:', event);
+        console.error("TTS error:", event);
       };
 
       // Speak the text
       this.synthesis.speak(utterance);
     } catch (error) {
-      console.error('Error with text-to-speech:', error);
+      console.error("Error with text-to-speech:", error);
     }
   }
 
@@ -205,7 +209,7 @@ class ChatManager {
    */
   toggleTTS() {
     this.ttsEnabled = !this.ttsEnabled;
-    console.log('TTS enabled:', this.ttsEnabled);
+    console.log("TTS enabled:", this.ttsEnabled);
     return this.ttsEnabled;
   }
 
@@ -214,8 +218,10 @@ class ChatManager {
    */
   clearChat() {
     // Remove all messages except system messages
-    const messages = this.chatMessages.querySelectorAll('.message:not(.system-message)');
-    messages.forEach(msg => msg.remove());
+    const messages = this.chatMessages.querySelectorAll(
+      ".message:not(.system-message)"
+    );
+    messages.forEach((msg) => msg.remove());
 
     // Clear history
     this.messageHistory = [];
@@ -223,7 +229,7 @@ class ChatManager {
     // Save empty session
     this.saveSessionToLocalStorage();
 
-    console.log('Chat cleared');
+    console.log("Chat cleared");
   }
 
   /**
@@ -233,9 +239,9 @@ class ChatManager {
     return {
       messages: this.messageHistory,
       timestamp: new Date().toISOString(),
-      goal: 'AI Assistant Session',
+      goal: "AI Assistant Session",
       progress: this.messageHistory.length,
-      sessionDuration: this.calculateSessionDuration()
+      sessionDuration: this.calculateSessionDuration(),
     };
   }
 
@@ -260,11 +266,11 @@ class ChatManager {
    * Add system notification message
    */
   addSystemMessage(text) {
-    this.addMessage(text, 'system');
+    this.addMessage(text, "system");
   }
 }
 
 // Create global instance
 window.chatManager = new ChatManager();
 
-console.log('Chat Manager initialized');
+console.log("Chat Manager initialized");

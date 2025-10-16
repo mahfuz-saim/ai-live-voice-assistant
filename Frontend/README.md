@@ -34,10 +34,12 @@ frontend/
 ## 🛠️ Installation
 
 1. **Install Node.js** (if not already installed)
+
    - Download from [nodejs.org](https://nodejs.org/)
    - Recommended version: 18.x or higher
 
 2. **Install Dependencies**
+
    ```powershell
    npm install
    ```
@@ -52,12 +54,15 @@ frontend/
 ## 🏃 Running the Application
 
 ### Development Mode
+
 ```powershell
 npm run dev
 ```
+
 This will open the application with DevTools enabled.
 
 ### Production Mode
+
 ```powershell
 npm start
 ```
@@ -86,22 +91,27 @@ const Config = {
 ## 🎮 Usage
 
 1. **Start the Application**
+
    - Run `npm start` or `npm run dev`
 
 2. **Connect to Backend**
+
    - The app automatically connects to the backend WebSocket server
 
 3. **Start Screen Sharing**
+
    - Click the "▶️ Start Sharing" button
    - Grant screen capture permissions when prompted
    - Select the screen/window you want to share
 
 4. **Chat with AI**
+
    - Type your message in the chat input box
    - Press Enter or click "Send"
    - AI responses will appear in the chat and be spoken aloud
 
 5. **Control Screen Sharing**
+
    - **Pause**: Temporarily stop sending frames (keeps stream active)
    - **Resume**: Continue sending frames
    - **Stop**: Completely stop screen sharing
@@ -117,6 +127,7 @@ const Config = {
 The frontend connects to: `ws://BACKEND_URL/ws`
 
 **Outgoing Messages:**
+
 ```json
 // Frame data
 {
@@ -134,6 +145,7 @@ The frontend connects to: `ws://BACKEND_URL/ws`
 ```
 
 **Incoming Messages:**
+
 ```json
 // AI response
 {
@@ -153,6 +165,7 @@ The frontend connects to: `ws://BACKEND_URL/ws`
 **Save Session**: `POST /save-session`
 
 Request body:
+
 ```json
 {
   "messages": [...],
@@ -168,6 +181,7 @@ Request body:
 ### UI Styling
 
 Edit `renderer/styles.css` to customize:
+
 - Colors and themes
 - Layout and spacing
 - Button styles
@@ -178,7 +192,7 @@ Edit `renderer/styles.css` to customize:
 Modify frame quality in `renderer/webrtc.js`:
 
 ```javascript
-const frameData = this.canvas.toDataURL('image/jpeg', 0.8); // 0.1 to 1.0
+const frameData = this.canvas.toDataURL("image/jpeg", 0.8); // 0.1 to 1.0
 ```
 
 ### TTS Voice
@@ -186,29 +200,33 @@ const frameData = this.canvas.toDataURL('image/jpeg', 0.8); // 0.1 to 1.0
 The app automatically selects an English voice. To customize, edit `renderer/chat.js`:
 
 ```javascript
-const englishVoice = voices.find(voice => 
-  voice.lang.startsWith('en') && voice.name.includes('Male') // Change to Male
+const englishVoice = voices.find(
+  (voice) => voice.lang.startsWith("en") && voice.name.includes("Male") // Change to Male
 );
 ```
 
 ## 🐛 Troubleshooting
 
 ### Screen Capture Not Working
+
 - Ensure you grant screen capture permissions
 - Check browser/Electron permissions
 - Try restarting the application
 
 ### WebSocket Connection Failed
+
 - Verify backend server is running
 - Check `.env` file has correct `BACKEND_URL`
 - Ensure no firewall is blocking the connection
 
 ### TTS Not Working
+
 - Check browser/system audio settings
 - Verify speech synthesis API is available
 - Try a different voice in settings
 
 ### Frames Not Sending
+
 - Check WebSocket connection status
 - Verify screen sharing is active (not paused)
 - Open DevTools to check for errors
@@ -218,11 +236,13 @@ const englishVoice = voices.find(voice =>
 To create a distributable package:
 
 1. Install electron-builder:
+
    ```powershell
    npm install --save-dev electron-builder
    ```
 
 2. Add build scripts to `package.json`:
+
    ```json
    "scripts": {
      "build": "electron-builder"
@@ -248,6 +268,7 @@ MIT License - Feel free to use and modify as needed.
 ## 🤝 Support
 
 For issues or questions, please check:
+
 - Console logs (DevTools)
 - Backend server logs
 - Network tab for WebSocket/HTTP requests

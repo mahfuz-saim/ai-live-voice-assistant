@@ -22,64 +22,63 @@ class WebSocketManager {
    */
   connect() {
     const wsURL = window.Config.getWebSocketURL();
-    console.log('Connecting to WebSocket:', wsURL);
+    console.log("Connecting to WebSocket:", wsURL);
 
     try {
       this.ws = new WebSocket(wsURL);
 
       // Connection opened
-      this.ws.addEventListener('open', () => {
-        console.log('WebSocket connected successfully');
+      this.ws.addEventListener("open", () => {
+        console.log("WebSocket connected successfully");
         this.isConnected = true;
         this.reconnectAttempts = 0;
-        this.updateStatus('connected');
-        
+        this.updateStatus("connected");
+
         // Send initial connection message
         this.send({
-          type: 'connection',
-          message: 'Client connected',
-          timestamp: new Date().toISOString()
+          type: "connection",
+          message: "Client connected",
+          timestamp: new Date().toISOString(),
         });
       });
 
       // Listen for messages from server
-      this.ws.addEventListener('message', (event) => {
+      this.ws.addEventListener("message", (event) => {
         try {
           const data = JSON.parse(event.data);
-          console.log('Received message from server:', data);
-          
+          console.log("Received message from server:", data);
+
           // Notify all registered callbacks
-          this.messageCallbacks.forEach(callback => {
+          this.messageCallbacks.forEach((callback) => {
             try {
               callback(data);
             } catch (error) {
-              console.error('Error in message callback:', error);
+              console.error("Error in message callback:", error);
             }
           });
         } catch (error) {
-          console.error('Error parsing WebSocket message:', error);
+          console.error("Error parsing WebSocket message:", error);
         }
       });
 
       // Connection closed
-      this.ws.addEventListener('close', (event) => {
-        console.log('WebSocket connection closed:', event.code, event.reason);
+      this.ws.addEventListener("close", (event) => {
+        console.log("WebSocket connection closed:", event.code, event.reason);
         this.isConnected = false;
-        this.updateStatus('disconnected');
-        
+        this.updateStatus("disconnected");
+
         // Attempt to reconnect
         this.attemptReconnect();
       });
 
       // Connection error
-      this.ws.addEventListener('error', (error) => {
-        console.error('WebSocket error:', error);
+      this.ws.addEventListener("error", (error) => {
+        console.error("WebSocket error:", error);
         this.isConnected = false;
-        this.updateStatus('error');
+        this.updateStatus("error");
       });
-
     } catch (error) {
-      console.error('Failed to create WebSocket connection:', error);
+      console.error("Failed to create WebSocket connection:", error);
       this.attemptReconnect();
     }
   }
@@ -89,16 +88,20 @@ class WebSocketManager {
    */
   attemptReconnect() {
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-      console.error('Max reconnection attempts reached. Please refresh the page.');
-      this.updateStatus('failed');
+      console.error(
+        "Max reconnection attempts reached. Please refresh the page."
+      );
+      this.updateStatus("failed");
       return;
     }
 
     this.reconnectAttempts++;
     const delay = this.reconnectDelay * Math.min(this.reconnectAttempts, 5);
-    
-    console.log(`Attempting to reconnect in ${delay}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
-    this.updateStatus('reconnecting');
+
+    console.log(
+      `Attempting to reconnect in ${delay}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`
+    );
+    this.updateStatus("reconnecting");
 
     // Clear any existing reconnect timeout
     if (this.reconnectTimeout) {
@@ -107,7 +110,7 @@ class WebSocketManager {
 
     // Schedule reconnection
     this.reconnectTimeout = setTimeout(() => {
-      console.log('Reconnecting...');
+      console.log("Reconnecting...");
       this.connect();
     }, delay);
   }
@@ -117,8 +120,12 @@ class WebSocketManager {
    * @param {Object} data - Data to send
    */
   send(data) {
-    if (!this.isConnected || !this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      console.warn('WebSocket is not connected. Message not sent:', data);
+    if (
+      !this.isConnected ||
+      !this.ws ||
+      this.ws.readyState !== WebSocket.OPEN
+    ) {
+      console.warn("WebSocket is not connected. Message not sent:", data);
       return false;
     }
 
@@ -126,7 +133,7 @@ class WebSocketManager {
       this.ws.send(JSON.stringify(data));
       return true;
     } catch (error) {
-      console.error('Error sending WebSocket message:', error);
+      console.error("Error sending WebSocket message:", error);
       return false;
     }
   }
@@ -137,9 +144,9 @@ class WebSocketManager {
    */
   sendFrame(base64Frame) {
     return this.send({
-      type: 'frame',
+      type: "frame",
       data: base64Frame,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
   }
 
@@ -149,9 +156,9 @@ class WebSocketManager {
    */
   sendChatMessage(message) {
     return this.send({
-      type: 'chat',
+      type: "chat",
       message: message,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
   }
 
@@ -161,24 +168,24 @@ class WebSocketManager {
    */
   sendSessionData(sessionData) {
     const backendURL = window.Config.getBackendURL();
-    
+
     // Use fetch for HTTP POST to /save-session endpoint
     return fetch(`${backendURL}/save-session`, {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json'
+        "Content-Type": "application/json",
       },
-      body: JSON.stringify(sessionData)
+      body: JSON.stringify(sessionData),
     })
-    .then(response => response.json())
-    .then(data => {
-      console.log('Session saved successfully:', data);
-      return data;
-    })
-    .catch(error => {
-      console.error('Error saving session:', error);
-      throw error;
-    });
+      .then((response) => response.json())
+      .then((data) => {
+        console.log("Session saved successfully:", data);
+        return data;
+      })
+      .catch((error) => {
+        console.error("Error saving session:", error);
+        throw error;
+      });
   }
 
   /**
@@ -222,27 +229,27 @@ class WebSocketManager {
     }
 
     this.isConnected = false;
-    this.updateStatus('disconnected');
-    console.log('WebSocket disconnected');
+    this.updateStatus("disconnected");
+    console.log("WebSocket disconnected");
   }
 
   /**
    * Get current connection status
    */
   getStatus() {
-    if (!this.ws) return 'disconnected';
-    
+    if (!this.ws) return "disconnected";
+
     switch (this.ws.readyState) {
       case WebSocket.CONNECTING:
-        return 'connecting';
+        return "connecting";
       case WebSocket.OPEN:
-        return 'connected';
+        return "connected";
       case WebSocket.CLOSING:
-        return 'closing';
+        return "closing";
       case WebSocket.CLOSED:
-        return 'disconnected';
+        return "disconnected";
       default:
-        return 'unknown';
+        return "unknown";
     }
   }
 }
@@ -250,4 +257,4 @@ class WebSocketManager {
 // Create global instance
 window.websocketManager = new WebSocketManager();
 
-console.log('WebSocket Manager initialized');
+console.log("WebSocket Manager initialized");

@@ -1,16 +1,16 @@
 // config.js - Configuration and Environment Variables
 // This file manages application configuration including backend URL
 
-const { ipcRenderer } = require('electron');
+const { ipcRenderer } = require("electron");
 
 /**
  * Global configuration object
  */
 const Config = {
-  BACKEND_URL: 'http://localhost:5000', // Default value
+  BACKEND_URL: "http://localhost:5000", // Default value
   WS_URL: null,
   FRAME_RATE: 1, // Frames per second (1-2 FPS for low bandwidth)
-  initialized: false
+  initialized: false,
 };
 
 /**
@@ -19,25 +19,32 @@ const Config = {
 function initializeConfig() {
   // Try to get environment variables from main process
   try {
-    const dotenv = require('dotenv');
+    const dotenv = require("dotenv");
     const result = dotenv.config();
-    
+
     if (result.parsed && result.parsed.BACKEND_URL) {
       Config.BACKEND_URL = result.parsed.BACKEND_URL;
     }
   } catch (error) {
-    console.warn('Could not load .env file, using default configuration:', error);
+    console.warn(
+      "Could not load .env file, using default configuration:",
+      error
+    );
   }
 
   // Construct WebSocket URL from backend URL
-  Config.WS_URL = Config.BACKEND_URL.replace('http://', 'ws://').replace('https://', 'wss://') + '/ws';
-  
+  Config.WS_URL =
+    Config.BACKEND_URL.replace("http://", "ws://").replace(
+      "https://",
+      "wss://"
+    ) + "/ws";
+
   Config.initialized = true;
-  
-  console.log('Configuration initialized:', {
+
+  console.log("Configuration initialized:", {
     BACKEND_URL: Config.BACKEND_URL,
     WS_URL: Config.WS_URL,
-    FRAME_RATE: Config.FRAME_RATE
+    FRAME_RATE: Config.FRAME_RATE,
   });
 }
 
@@ -75,5 +82,5 @@ initializeConfig();
 window.Config = {
   getBackendURL,
   getWebSocketURL,
-  getFrameRate
+  getFrameRate,
 };
