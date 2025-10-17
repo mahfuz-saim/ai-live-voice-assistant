@@ -1,20 +1,26 @@
 // Gemini AI utility functions
 // This file handles all interactions with Google's Gemini API
 
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
 
 dotenv.config();
 
-// Initialize Gemini API
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+// Initialize Gemini API with the new SDK
+const ai = new GoogleGenAI({
+  apiKey: process.env.GEMINI_API_KEY,
+});
 
 /**
- * Get Gemini model instance
- * Using gemini-1.5-flash for fast responses (free tier)
+ * Get Gemini model name
+ * Using gemini-2.5-flash for fast responses
+ * Note: Returns model name string, not model instance
  */
-export function getGeminiModel() {
-  return genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+export function getGeminiModelName(withVision = false) {
+  // gemini-2.5-flash supports both text and vision
+  const modelName = "gemini-2.5-flash";
+  console.log(`🤖 [Gemini] Using model: ${modelName}`);
+  return modelName;
 }
 
 /**
@@ -25,7 +31,7 @@ export function getGeminiModel() {
  */
 export async function sendChatMessage(message, conversationHistory = []) {
   try {
-    const model = getGeminiModel();
+    const modelName = getGeminiModelName(false); // Text only
 
     // Build context from conversation history
     let context = "";
@@ -39,9 +45,12 @@ export async function sendChatMessage(message, conversationHistory = []) {
     // Combine context with new message
     const fullPrompt = context + `User: ${message}\n\nAssistant:`;
 
-    const result = await model.generateContent(fullPrompt);
-    const response = await result.response;
-    return response.text();
+    const response = await ai.models.generateContent({
+      model: modelName,
+      contents: fullPrompt,
+    });
+
+    return response.text;
   } catch (error) {
     console.error("Error calling Gemini API:", error);
     throw new Error("Failed to get AI response");
@@ -53,11 +62,29 @@ export async function sendChatMessage(message, conversationHistory = []) {
  * @param {string} base64Image - Base64-encoded screen capture
  * @param {string} userGoal - What the user is trying to accomplish
  * @param {Object} metadata - Additional context (mouse position, detected elements, etc.)
+ * @param {string} imageFormat - Image format ('jpeg', 'png', 'jpg')
  * @returns {Promise<string>} - AI guidance text
  */
-export async function analyzeScreenFrame(base64Image, userGoal, metadata = {}) {
+export async function analyzeScreenFrame(
+  base64Image,
+  userGoal,
+  metadata = {},
+  imageFormat = "jpeg"
+) {
   try {
-    const model = getGeminiModel();
+    console.log(`🔍 [Gemini] Starting screen analysis...`);
+    console.log(`🔍 [Gemini] Image format: ${imageFormat}`);
+    console.log(
+      `🔍 [Gemini] Base64 data length: ${base64Image.length} characters`
+    );
+    console.log(
+      `🔍 [Gemini] Estimated image size: ${Math.round(
+        base64Image.length / 1024
+      )}KB`
+    );
+
+    // Use gemini-2.5-flash (supports both text and vision)
+    const modelName = getGeminiModelName(true);
 
     // Prepare the prompt for screen analysis
     const prompt = `You are an AI assistant helping a user accomplish a task on their computer.
@@ -79,22 +106,78 @@ ${
 
 Analyze the screen image and provide clear, concise guidance on what the user should do next. Be specific about which UI elements to click or interact with. Keep your response brief and actionable (2-3 sentences max).`;
 
-    // Prepare image data for Gemini
-    const imageParts = [
-      {
-        inlineData: {
-          data: base64Image,
-          mimeType: "image/png",
-        },
-      },
-    ];
+    // Determine correct MIME type
+    let mimeType = "image/jpeg"; // Default to JPEG
+    if (imageFormat.toLowerCase() === "png") {
+      mimeType = "image/png";
+    } else if (
+      imageFormat.toLowerCase() === "jpg" ||
+      imageFormat.toLowerCase() === "jpeg"
+    ) {
+      mimeType = "image/jpeg";
+    }
 
-    const result = await model.generateContent([prompt, ...imageParts]);
-    const response = await result.response;
-    return response.text();
+    console.log(`🔍 [Gemini] Using MIME type: ${mimeType}`);
+
+    // Validate base64 data
+    if (!base64Image || base64Image.trim() === "") {
+      throw new Error("Base64 image data is empty");
+    }
+
+    console.log(`🔍 [Gemini] Sending request to Gemini API...`);
+
+    // Use new SDK format with inline data
+    const response = await ai.models.generateContent({
+      model: modelName,
+      contents: [
+        {
+          parts: [
+            { text: prompt },
+            {
+              inlineData: {
+                data: base64Image,
+                mimeType: mimeType,
+              },
+            },
+          ],
+        },
+      ],
+    });
+
+    console.log(`🔍 [Gemini] Received response from Gemini API`);
+    const responseText = response.text;
+
+    console.log(
+      `✅ [Gemini] Analysis complete. Response length: ${responseText.length} characters`
+    );
+
+    return responseText;
   } catch (error) {
-    console.error("Error analyzing screen frame:", error);
-    throw new Error("Failed to analyze screen");
+    console.error("❌ [Gemini] Error analyzing screen frame:", error);
+    console.error("❌ [Gemini] Error name:", error.name);
+    console.error("❌ [Gemini] Error message:", error.message);
+
+    // Provide more specific error messages
+    if (error.message.includes("API key")) {
+      throw new Error(
+        "Gemini API key is invalid or not set. Check GEMINI_API_KEY in .env"
+      );
+    } else if (
+      error.message.includes("quota") ||
+      error.message.includes("RESOURCE_EXHAUSTED")
+    ) {
+      throw new Error(
+        "Gemini API quota exceeded. Please wait or upgrade your plan"
+      );
+    } else if (error.message.includes("INVALID_ARGUMENT")) {
+      throw new Error(
+        "Invalid image data sent to Gemini API. Check image format and encoding"
+      );
+    } else if (error.message.includes("timeout")) {
+      throw new Error("Gemini API request timeout. Please try again");
+    } else {
+      throw new Error(`Gemini API error: ${error.message}`);
+    }
   }
 }
 
@@ -114,7 +197,8 @@ export async function getContextualResponse({
   userGoal,
 }) {
   try {
-    const model = getGeminiModel();
+    // Use gemini-2.5-flash (supports both text and vision)
+    const modelName = getGeminiModelName();
 
     // Build comprehensive prompt
     let prompt = `You are a helpful AI voice assistant guiding a user through tasks on their computer.
@@ -134,26 +218,38 @@ User's Goal: ${userGoal || "General assistance"}
 
     prompt += `Current User Message: ${message}\n\nProvide a helpful, concise response that guides the user toward their goal. If they're asking about what's on the screen, describe what you see and suggest next steps.`;
 
+    let contents = [];
+
     // If image is provided, include it in the analysis
     if (base64Image) {
-      const imageParts = [
+      contents = [
         {
-          inlineData: {
-            data: base64Image,
-            mimeType: "image/png",
-          },
+          parts: [
+            { text: prompt },
+            {
+              inlineData: {
+                data: base64Image,
+                mimeType: "image/jpeg",
+              },
+            },
+          ],
         },
       ];
-
-      const result = await model.generateContent([prompt, ...imageParts]);
-      const response = await result.response;
-      return response.text();
     } else {
       // Text-only response
-      const result = await model.generateContent(prompt);
-      const response = await result.response;
-      return response.text();
+      contents = [
+        {
+          parts: [{ text: prompt }],
+        },
+      ];
     }
+
+    const response = await ai.models.generateContent({
+      model: modelName,
+      contents: contents,
+    });
+
+    return response.text;
   } catch (error) {
     console.error("Error getting contextual response:", error);
     throw new Error("Failed to get AI response");
@@ -167,7 +263,7 @@ User's Goal: ${userGoal || "General assistance"}
  */
 export async function generateSessionTitle(messages) {
   try {
-    const model = getGeminiModel();
+    const modelName = getGeminiModelName(); // Text only, no vision needed
 
     const conversationSummary = messages
       .slice(0, 5)
@@ -178,9 +274,16 @@ export async function generateSessionTitle(messages) {
 
 Generate a short, descriptive title (4-6 words max) that captures the main topic or goal. Only return the title, nothing else.`;
 
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    return response.text().trim();
+    const response = await ai.models.generateContent({
+      model: modelName,
+      contents: [
+        {
+          parts: [{ text: prompt }],
+        },
+      ],
+    });
+
+    return response.text.trim();
   } catch (error) {
     console.error("Error generating session title:", error);
     return "Untitled Session";

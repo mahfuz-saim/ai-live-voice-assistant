@@ -99,13 +99,29 @@ async function handleWebSocketMessage(sessionId, message) {
   }
 
   switch (message.type) {
-    case "screen_frame":
-      // Handle screen frame analysis
+    case "connection":
+      // Handle client connection message - just acknowledge
+      console.log(`🤝 Client connection acknowledged for ${sessionId}`);
+      // Don't send response to avoid cluttering the frontend
+      break;
+
+    case "frame":
+      // Handle screen frame from frontend (uses 'data' field)
       await handleScreenFrame(sessionId, message);
       break;
 
+    case "screen_frame":
+      // Handle screen frame (legacy format with 'frame' field)
+      await handleScreenFrame(sessionId, message);
+      break;
+
+    case "chat":
+      // Handle chat message from frontend
+      await handleChatMessage(sessionId, message);
+      break;
+
     case "chat_message":
-      // Handle text chat message
+      // Handle chat message (legacy format)
       await handleChatMessage(sessionId, message);
       break;
 
@@ -114,8 +130,10 @@ async function handleWebSocketMessage(sessionId, message) {
       session.userGoal = message.goal;
       ws.send(
         JSON.stringify({
-          type: "goal_updated",
+          type: "status",
+          message: "Goal updated",
           goal: message.goal,
+          timestamp: new Date().toISOString(),
         })
       );
       break;
@@ -132,20 +150,28 @@ async function handleWebSocketMessage(sessionId, message) {
           type: "history",
           conversationHistory,
           screenHistory,
+          timestamp: new Date().toISOString(),
         })
       );
       break;
 
     case "ping":
       // Respond to ping to keep connection alive
-      ws.send(JSON.stringify({ type: "pong" }));
+      ws.send(
+        JSON.stringify({
+          type: "pong",
+          timestamp: new Date().toISOString(),
+        })
+      );
       break;
 
     default:
+      console.warn(`⚠️ Unknown message type: ${message.type}`);
       ws.send(
         JSON.stringify({
           type: "error",
           message: `Unknown message type: ${message.type}`,
+          timestamp: new Date().toISOString(),
         })
       );
   }
@@ -163,57 +189,90 @@ async function handleScreenFrame(sessionId, message) {
   const { ws, userGoal, metadata, screenHistory } = session;
 
   try {
+    // Handle both 'data' field (frontend format) and 'frame' field (legacy format)
+    const frameData = message.data || message.frame;
+
     // Validate that frame data exists
-    if (!message.frame) {
+    if (!frameData) {
       console.error("No frame data received");
       ws.send(
         JSON.stringify({
           type: "error",
           message: "No frame data provided",
-          error: "Frame field is required",
+          error: "Frame data field is required",
+          timestamp: new Date().toISOString(),
         })
       );
       return;
     }
 
-    // Notify client that analysis has started
-    ws.send(
-      JSON.stringify({
-        type: "analyzing",
-        message: "Analyzing screen...",
-      })
-    );
+    // Don't send "analyzing" message for frame messages to avoid cluttering frontend
+    // Frontend sends frames at 1-2 FPS, so we want minimal response
 
-    // Extract base64 image (remove data:image/png;base64, prefix if present)
-    let base64Image = message.frame;
+    // Extract base64 image (remove data:image/jpeg;base64, or data:image/png;base64, prefix if present)
+    let base64Image = frameData;
     if (base64Image.includes("base64,")) {
       base64Image = base64Image.split("base64,")[1];
     }
 
     // Validate base64 image is not empty
     if (!base64Image || base64Image.trim() === "") {
-      console.error("Empty base64 image data");
+      console.error("❌ Empty base64 image data");
       ws.send(
         JSON.stringify({
           type: "error",
           message: "Invalid frame data",
           error: "Base64 image data is empty",
+          timestamp: new Date().toISOString(),
+        })
+      );
+      return;
+    }
+
+    // Validate base64 format (basic check)
+    const base64Regex = /^[A-Za-z0-9+/]+=*$/;
+    const sampleSize = Math.min(100, base64Image.length);
+    const sample = base64Image.substring(0, sampleSize);
+
+    if (!base64Regex.test(sample)) {
+      console.error("❌ Invalid base64 format detected");
+      console.error("Sample:", sample);
+      ws.send(
+        JSON.stringify({
+          type: "error",
+          message: "Invalid frame data format",
+          error: "Base64 data appears to be corrupted or invalid",
+          timestamp: new Date().toISOString(),
         })
       );
       return;
     }
 
     // Log frame info for debugging
-    console.log(
-      `📸 Processing frame: ${Math.round(base64Image.length / 1024)}KB`
-    );
+    const frameSizeKB = Math.round(base64Image.length / 1024);
+    console.log(`📸 Processing frame: ${frameSizeKB}KB`);
+    console.log(`📏 Base64 length: ${base64Image.length} characters`);
     console.log(`🎯 User goal: ${userGoal || "Not set"}`);
 
+    // Detect image format from base64 header or assume JPEG
+    let imageFormat = "jpeg"; // Default to JPEG as frontend sends JPEG
+    if (frameData.includes("data:image/")) {
+      if (frameData.includes("image/png")) imageFormat = "png";
+      else if (
+        frameData.includes("image/jpeg") ||
+        frameData.includes("image/jpg")
+      )
+        imageFormat = "jpeg";
+    }
+    console.log(`🖼️ Image format detected: ${imageFormat}`);
+
     // Analyze the screen frame with Gemini
+    console.log(`🤖 Sending frame to Gemini AI for analysis...`);
     const guidance = await analyzeScreenFrame(
       base64Image,
       userGoal || "Assist user with their current task",
-      metadata
+      metadata,
+      imageFormat // Pass the image format
     );
 
     // Store screen step in history
@@ -225,11 +284,11 @@ async function handleScreenFrame(sessionId, message) {
     };
     screenHistory.push(screenStep);
 
-    // Send AI guidance back to client
+    // Send AI guidance back to client using frontend's expected format
     ws.send(
       JSON.stringify({
-        type: "screen_guidance",
-        guidance,
+        type: "response",
+        message: guidance,
         timestamp: screenStep.timestamp,
       })
     );
@@ -237,12 +296,48 @@ async function handleScreenFrame(sessionId, message) {
     console.log(`✅ Screen frame analyzed successfully for ${sessionId}`);
   } catch (error) {
     console.error("❌ Error analyzing screen frame:", error);
-    console.error("Error details:", error.stack);
+    console.error("Error name:", error.name);
+    console.error("Error message:", error.message);
+    console.error("Error stack:", error.stack);
+
+    // Log additional debugging info
+    console.error(
+      "Frame data length:",
+      message.data?.length || message.frame?.length || 0
+    );
+    console.error("Session ID:", sessionId);
+    console.error("User goal:", userGoal);
+
+    // Check if it's a specific error type
+    let errorMessage = "Failed to analyze screen";
+    let errorDetails = error.message;
+
+    if (error.message.includes("API key")) {
+      errorMessage = "AI API authentication failed";
+      errorDetails = "Please check GEMINI_API_KEY in .env file";
+    } else if (
+      error.message.includes("quota") ||
+      error.message.includes("rate limit")
+    ) {
+      errorMessage = "AI API rate limit exceeded";
+      errorDetails = "Too many requests, please wait a moment";
+    } else if (
+      error.message.includes("invalid") ||
+      error.message.includes("decode")
+    ) {
+      errorMessage = "Invalid image data";
+      errorDetails = "Failed to decode base64 image";
+    } else if (error.message.includes("timeout")) {
+      errorMessage = "AI API request timeout";
+      errorDetails = "Request took too long, please try again";
+    }
+
     ws.send(
       JSON.stringify({
         type: "error",
-        message: "Failed to analyze screen",
-        error: error.message,
+        message: errorMessage,
+        error: errorDetails,
+        timestamp: new Date().toISOString(),
       })
     );
   }
@@ -260,14 +355,18 @@ async function handleChatMessage(sessionId, message) {
   const { ws, conversationHistory, userGoal, metadata } = session;
 
   try {
+    // Handle both 'message' field (frontend format) and 'content' field (legacy format)
+    const chatContent = message.message || message.content;
+
     // Validate that content exists
-    if (!message.content) {
+    if (!chatContent) {
       console.error("No content in chat message");
       ws.send(
         JSON.stringify({
           type: "error",
           message: "No content provided",
-          error: "Content field is required for chat messages",
+          error: "Message field is required for chat messages",
+          timestamp: new Date().toISOString(),
         })
       );
       return;
@@ -276,22 +375,23 @@ async function handleChatMessage(sessionId, message) {
     // Add user message to conversation history
     const userMessage = {
       role: "user",
-      content: message.content,
+      content: chatContent,
       timestamp: new Date().toISOString(),
     };
     conversationHistory.push(userMessage);
 
-    // Notify client that we're processing
+    // Send status update
     ws.send(
       JSON.stringify({
-        type: "processing",
+        type: "status",
         message: "Processing your message...",
+        timestamp: new Date().toISOString(),
       })
     );
 
     // Get AI response with full context
     const responseText = await getContextualResponse({
-      message: message.content,
+      message: chatContent,
       base64Image: message.includeScreen ? message.screenFrame : null,
       conversationHistory,
       userGoal,
@@ -305,21 +405,24 @@ async function handleChatMessage(sessionId, message) {
     };
     conversationHistory.push(aiMessage);
 
-    // Send response to client
+    // Send response to client using frontend's expected format
     ws.send(
       JSON.stringify({
-        type: "chat_response",
+        type: "response",
         message: responseText,
         timestamp: aiMessage.timestamp,
       })
     );
+
+    console.log(`✅ Chat message processed successfully for ${sessionId}`);
   } catch (error) {
-    console.error("Error handling chat message:", error);
+    console.error("❌ Error handling chat message:", error);
     ws.send(
       JSON.stringify({
         type: "error",
         message: "Failed to get AI response",
         error: error.message,
+        timestamp: new Date().toISOString(),
       })
     );
   }
