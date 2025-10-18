@@ -1,18 +1,9 @@
-// app.js - Main Application Logic
-// This file coordinates all modules and handles UI interactions
-
-/**
- * Application State
- */
 const AppState = {
   isScreenSharing: false,
   isConnected: false,
   isPaused: false,
 };
 
-/**
- * UI Elements
- */
 const UI = {
   startBtn: document.getElementById("startBtn"),
   pauseBtn: document.getElementById("pauseBtn"),
@@ -25,28 +16,18 @@ const UI = {
   frameRate: document.getElementById("frameRate"),
 };
 
-/**
- * Initialize application
- */
 function initializeApp() {
   console.log("Initializing AI Voice Assistant...");
-
-  // Set up button event listeners
   setupButtonListeners();
 
-  // Connect to WebSocket
   window.websocketManager.connect();
 
-  // Set up WebSocket message handler
   window.websocketManager.onMessage(handleWebSocketMessage);
 
-  // Set up WebSocket status handler
   window.websocketManager.onStatusChange(handleConnectionStatus);
 
-  // Set up WebRTC frame capture callback
   window.webrtcManager.onFrameCaptured(handleFrameCaptured);
 
-  // Load voices for TTS (may need time to load)
   if (window.speechSynthesis) {
     window.speechSynthesis.onvoiceschanged = () => {
       console.log("TTS voices loaded");
@@ -56,11 +37,7 @@ function initializeApp() {
   console.log("Application initialized successfully");
 }
 
-/**
- * Set up button event listeners
- */
 function setupButtonListeners() {
-  // Start button
   UI.startBtn.addEventListener("click", async () => {
     console.log("Start button clicked");
 
@@ -75,18 +52,15 @@ function setupButtonListeners() {
     }
   });
 
-  // Pause button
   UI.pauseBtn.addEventListener("click", () => {
     console.log("Pause button clicked");
 
     if (AppState.isPaused) {
-      // Resume
       window.webrtcManager.resumeCapture();
       AppState.isPaused = false;
       UI.pauseBtn.textContent = "⏸️ Pause";
       window.chatManager.addSystemMessage("Screen sharing resumed.");
     } else {
-      // Pause
       window.webrtcManager.pauseCapture();
       AppState.isPaused = true;
       UI.pauseBtn.textContent = "▶️ Resume";
@@ -94,7 +68,6 @@ function setupButtonListeners() {
     }
   });
 
-  // Stop button
   UI.stopBtn.addEventListener("click", () => {
     console.log("Stop button clicked");
 
@@ -105,7 +78,6 @@ function setupButtonListeners() {
     window.chatManager.addSystemMessage("Screen sharing stopped.");
   });
 
-  // Save Session button
   UI.saveSessionBtn.addEventListener("click", async () => {
     console.log("Save Session button clicked");
 
@@ -126,7 +98,6 @@ function setupButtonListeners() {
     }
   });
 
-  // Clear Chat button
   UI.clearChatBtn.addEventListener("click", () => {
     console.log("Clear Chat button clicked");
 
@@ -139,9 +110,6 @@ function setupButtonListeners() {
   });
 }
 
-/**
- * Update UI based on screen sharing state
- */
 function updateUIForScreenSharing(isSharing) {
   if (isSharing) {
     UI.startBtn.disabled = true;
@@ -159,68 +127,51 @@ function updateUIForScreenSharing(isSharing) {
   }
 }
 
-/**
- * Handle captured frames from WebRTC
- */
 function handleFrameCaptured(base64Frame) {
-  // Send frame to backend via WebSocket
   if (AppState.isConnected) {
     window.websocketManager.sendFrame(base64Frame);
   }
 }
 
-/**
- * Handle incoming WebSocket messages
- */
 function handleWebSocketMessage(data) {
   console.log("Received message:", data);
 
   switch (data.type) {
     case "chat":
     case "response":
-      // AI response message
       if (data.message) {
         window.chatManager.handleAIResponse(data.message);
       }
       break;
 
     case "frame":
-      // Frame data - ignore (we're sending these, not receiving)
       console.log("Frame message received (ignoring)");
       break;
 
     case "frame_received":
     case "frame_acknowledged":
-      // Frame acknowledgment (optional)
       console.log("Frame received by backend");
       break;
 
     case "error":
-      // Error message
       console.error("Backend error:", data.message);
       window.chatManager.addSystemMessage(`⚠️ Error: ${data.message}`);
       break;
 
     case "status":
-      // Status update
       console.log("Backend status:", data.message);
       break;
 
     case "connection":
-      // Connection acknowledgment
       console.log("Connection acknowledged by backend");
       break;
 
     default:
-      // Unknown message type - log to console only, don't show in chat
       console.warn("Unknown message type:", data.type, data);
       break;
   }
 }
 
-/**
- * Handle WebSocket connection status changes
- */
 function handleConnectionStatus(status) {
   console.log("Connection status changed:", status);
 
@@ -261,25 +212,18 @@ function handleConnectionStatus(status) {
   }
 }
 
-/**
- * Handle application cleanup on window close
- */
 window.addEventListener("beforeunload", () => {
   console.log("Application closing, cleaning up...");
 
-  // Stop screen capture
   if (AppState.isScreenSharing) {
     window.webrtcManager.stopCapture();
   }
 
-  // Stop TTS
   window.chatManager.stopSpeaking();
 
-  // Disconnect WebSocket
   window.websocketManager.disconnect();
 });
 
-// Initialize app when DOM is loaded
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", initializeApp);
 } else {

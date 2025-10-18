@@ -1,23 +1,13 @@
-// config.js - Configuration and Environment Variables
-// This file manages application configuration including backend URL
-
 const { ipcRenderer } = require("electron");
 
-/**
- * Global configuration object
- */
 const Config = {
-  BACKEND_URL: "http://localhost:5000", // Default value
+  BACKEND_URL: "http://localhost:5000",
   WS_URL: null,
-  FRAME_RATE: 1, // Frames per second (1-2 FPS for low bandwidth)
+  FRAME_RATE: 1,
   initialized: false,
 };
 
-/**
- * Initialize configuration from environment variables
- */
 function initializeConfig() {
-  // Try to get environment variables from main process
   try {
     const dotenv = require("dotenv");
     const result = dotenv.config();
@@ -32,7 +22,6 @@ function initializeConfig() {
     );
   }
 
-  // Construct WebSocket URL from backend URL
   Config.WS_URL =
     Config.BACKEND_URL.replace("http://", "ws://").replace(
       "https://",
@@ -48,9 +37,6 @@ function initializeConfig() {
   });
 }
 
-/**
- * Get backend API URL
- */
 function getBackendURL() {
   if (!Config.initialized) {
     initializeConfig();
@@ -58,9 +44,6 @@ function getBackendURL() {
   return Config.BACKEND_URL;
 }
 
-/**
- * Get WebSocket URL
- */
 function getWebSocketURL() {
   if (!Config.initialized) {
     initializeConfig();
@@ -68,17 +51,12 @@ function getWebSocketURL() {
   return Config.WS_URL;
 }
 
-/**
- * Get frame rate for screen capture
- */
 function getFrameRate() {
   return Config.FRAME_RATE;
 }
 
-// Initialize configuration on load
 initializeConfig();
 
-// Export functions for use in other modules
 window.Config = {
   getBackendURL,
   getWebSocketURL,
