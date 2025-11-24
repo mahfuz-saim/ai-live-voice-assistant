@@ -103,51 +103,6 @@
     .floating-btn-stop:hover {
       background: #c82333;
     }
-
-    /* Countdown overlay */
-    .countdown-overlay {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      display: none;
-      align-items: center;
-      justify-content: center;
-      background: rgba(0, 0, 0, 0.3);
-      z-index: 1000;
-      pointer-events: none;
-    }
-
-    .countdown-overlay.show {
-      display: flex;
-    }
-
-    .countdown-number {
-      font-size: 80px;
-      font-weight: bold;
-      color: #667eea;
-      text-shadow: 
-        0 0 20px rgba(102, 126, 234, 0.8),
-        0 0 40px rgba(102, 126, 234, 0.6),
-        0 0 60px rgba(102, 126, 234, 0.4);
-      animation: countdownPulse 1s ease-in-out;
-    }
-
-    @keyframes countdownPulse {
-      0% {
-        transform: scale(0.5);
-        opacity: 0;
-      }
-      50% {
-        transform: scale(1.2);
-        opacity: 1;
-      }
-      100% {
-        transform: scale(1);
-        opacity: 1;
-      }
-    }
   </style>
 </head>
 <body>
@@ -165,20 +120,12 @@
     </div>
   </div>
 
-  <div id="countdownOverlay" class="countdown-overlay">
-    <div class="countdown-number" id="countdownNumber">3</div>
-  </div>
-
   <script>
     const { ipcRenderer } = require('electron');
 
     const floatingChatInput = document.getElementById('floatingChatInput');
     const floatingSendBtn = document.getElementById('floatingSendBtn');
     const floatingStopBtn = document.getElementById('floatingStopBtn');
-    const countdownOverlay = document.getElementById('countdownOverlay');
-    const countdownNumber = document.getElementById('countdownNumber');
-
-    let isFirstMessage = true;
 
     floatingSendBtn.addEventListener('click', handleSend);
 
@@ -193,16 +140,10 @@
       ipcRenderer.send('floating-stop');
     });
 
-    async function handleSend() {
+    function handleSend() {
       const message = floatingChatInput.value.trim();
       
-      // Show countdown if first message
-      if (isFirstMessage) {
-        isFirstMessage = false;
-        await showCountdown();
-      }
-
-      // Send message to main window
+      // Send message to main window immediately
       ipcRenderer.send('floating-send-message', {
         message: message || 'Analyze this screen',
         timestamp: new Date().toISOString()
@@ -211,48 +152,12 @@
       floatingChatInput.value = '';
     }
 
-    function showCountdown() {
-      return new Promise((resolve) => {
-        const countdownNumbers = [3, 2, 1];
-        let currentIndex = 0;
-
-        countdownOverlay.classList.add('show');
-
-        function updateCountdown() {
-          if (currentIndex < countdownNumbers.length) {
-            countdownNumber.textContent = countdownNumbers[currentIndex];
-            
-            // Reset animation
-            countdownNumber.style.animation = 'none';
-            setTimeout(() => {
-              countdownNumber.style.animation = 'countdownPulse 1s ease-in-out';
-            }, 10);
-
-            currentIndex++;
-            setTimeout(updateCountdown, 1000);
-          } else {
-            countdownOverlay.classList.remove('show');
-            resolve();
-          }
-        }
-
-        updateCountdown();
-      });
-    }
-
-    // Listen for reset first message flag
-    ipcRenderer.on('reset-first-message', () => {
-      isFirstMessage = true;
-    });
-
     // Auto-focus the input when window loads
     window.addEventListener('DOMContentLoaded', () => {
       setTimeout(() => {
         floatingChatInput.focus();
       }, 100);
     });
-
-    console.log('Floating window loaded');
   </script>
 </body>
 </html>

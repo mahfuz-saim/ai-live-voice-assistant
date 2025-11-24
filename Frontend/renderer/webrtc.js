@@ -147,7 +147,7 @@ class WebRTCManager {
 
       this.isCapturing = true;
       this.isPaused = false;
-      this.startFrameCapture();
+      // Removed automatic frame capture - frames will be captured on-demand when sending messages
 
       this.stream.getVideoTracks()[0].addEventListener("ended", () => {
         console.log("Screen sharing ended by user");
@@ -183,18 +183,15 @@ class WebRTCManager {
 
   pauseCapture() {
     this.isPaused = true;
-    if (this.captureInterval) {
-      clearInterval(this.captureInterval);
-      this.captureInterval = null;
-    }
-    console.log("Frame capture paused");
+    // No longer stopping intervals since we don't have automatic capture
+    console.log("Screen capture paused");
   }
 
   resumeCapture() {
     if (this.isCapturing && this.isPaused) {
       this.isPaused = false;
-      this.startFrameCapture();
-      console.log("Frame capture resumed");
+      // No longer starting intervals since we don't have automatic capture
+      console.log("Screen capture resumed");
     }
   }
 
@@ -225,16 +222,8 @@ class WebRTCManager {
     console.log("Screen capture stopped");
   }
 
-  startFrameCapture() {
-    const frameRate = window.Config.getFrameRate();
-    const interval = 1000 / frameRate;
-
-    this.captureInterval = setInterval(() => {
-      if (!this.isPaused && this.isCapturing) {
-        this.captureFrame();
-      }
-    }, interval);
-  }
+  // Removed automatic frame capture - frames are now captured on-demand
+  // startFrameCapture() method is no longer needed
 
   captureFrame() {
     if (!this.videoElement || !this.videoElement.videoWidth) {
@@ -242,6 +231,15 @@ class WebRTCManager {
     }
 
     try {
+      // Temporarily hide floating overlay to exclude it from capture
+      const floatingOverlay = document.getElementById("floatingOverlay");
+      const wasVisible =
+        floatingOverlay && !floatingOverlay.classList.contains("hidden");
+
+      if (wasVisible) {
+        floatingOverlay.style.display = "none";
+      }
+
       this.canvas.width = this.videoElement.videoWidth;
       this.canvas.height = this.videoElement.videoHeight;
 
@@ -257,9 +255,15 @@ class WebRTCManager {
 
       const base64Data = frameData.split(",")[1];
 
-      if (this.frameCallback) {
-        this.frameCallback(base64Data);
+      // Restore floating overlay visibility
+      if (wasVisible) {
+        floatingOverlay.style.display = "";
       }
+
+      // No longer triggering automatic callback - frames are captured on-demand
+      // if (this.frameCallback) {
+      //   this.frameCallback(base64Data);
+      // }
 
       return base64Data;
     } catch (error) {
@@ -268,9 +272,7 @@ class WebRTCManager {
     }
   }
 
-  onFrameCaptured(callback) {
-    this.frameCallback = callback;
-  }
+  // Removed onFrameCaptured method as automatic frame capture is no longer used
 
   isCaptureActive() {
     return this.isCapturing && !this.isPaused;

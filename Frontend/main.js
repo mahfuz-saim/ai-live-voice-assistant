@@ -1,8 +1,9 @@
-const { app, BrowserWindow, session } = require("electron");
+const { app, BrowserWindow, session, ipcMain } = require("electron");
 const path = require("path");
 require("dotenv").config();
 
 let mainWindow;
+let floatingWindow;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -45,6 +46,10 @@ function createWindow() {
 
   mainWindow.on("closed", () => {
     mainWindow = null;
+    if (floatingWindow) {
+      floatingWindow.close();
+      floatingWindow = null;
+    }
   });
 
   mainWindow.webContents.on("did-finish-load", () => {
@@ -53,6 +58,93 @@ function createWindow() {
     });
   });
 }
+
+function createFloatingWindow() {
+  if (floatingWindow) {
+    floatingWindow.show();
+    floatingWindow.focus();
+    return;
+  }
+
+  const { screen } = require("electron");
+  const primaryDisplay = screen.getPrimaryDisplay();
+  const { width, height } = primaryDisplay.workAreaSize;
+
+  floatingWindow = new BrowserWindow({
+    width: 700,
+    height: 80,
+    x: Math.floor((width - 700) / 2),
+    y: height - 120,
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    resizable: false,
+    movable: true,
+    focusable: true,
+    webPreferences: {
+      nodeIntegration: true,
+      contextIsolation: false,
+    },
+  });
+
+  floatingWindow.loadFile(path.join(__dirname, "renderer", "floating.html"));
+
+  // Keep it above fullscreen apps
+  floatingWindow.setAlwaysOnTop(true, "screen-saver");
+
+  floatingWindow.on("closed", () => {
+    floatingWindow = null;
+  });
+
+  if (process.argv.includes("--dev")) {
+    floatingWindow.webContents.openDevTools({ mode: "detach" });
+  }
+}
+
+function closeFloatingWindow() {
+  if (floatingWindow) {
+    floatingWindow.close();
+    floatingWindow = null;
+  }
+}
+
+// IPC handlers for window management
+ipcMain.on("create-floating-window", () => {
+  createFloatingWindow();
+});
+
+ipcMain.on("close-floating-window", () => {
+  closeFloatingWindow();
+});
+
+ipcMain.on("minimize-main-window", () => {
+  if (mainWindow) {
+    mainWindow.minimize();
+  }
+});
+
+ipcMain.on("restore-main-window", () => {
+  if (mainWindow) {
+    mainWindow.restore();
+    mainWindow.focus();
+    mainWindow.show();
+  }
+});
+
+ipcMain.on("floating-send-message", (event, data) => {
+  // Forward message to main window
+  if (mainWindow) {
+    mainWindow.webContents.send("floating-message", data);
+  }
+});
+
+ipcMain.on("floating-stop", () => {
+  // Forward stop command to main window
+  if (mainWindow) {
+    mainWindow.webContents.send("floating-stop");
+  }
+});
 
 app.whenReady().then(() => {
   session.defaultSession.setPermissionCheckHandler(

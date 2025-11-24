@@ -58,7 +58,7 @@ class ChatManager {
     });
   }
 
-  sendMessage() {
+  async sendMessage() {
     const message = this.chatInput.value.trim();
 
     if (!message) {
@@ -67,7 +67,35 @@ class ChatManager {
 
     this.addMessage(message, "user");
 
-    window.websocketManager.sendChatMessage(message);
+    // Set button to thinking state
+    this.setButtonThinking(true);
+
+    // Always capture screen frame - auto-start capture if not active
+    let frameData = null;
+    
+    // Check if screen capture is active
+    if (!window.webrtcManager.isCaptureActive()) {
+      console.log("Screen capture not active, starting automatically...");
+      // Start capture silently
+      const success = await window.webrtcManager.startCapture();
+      if (!success) {
+        console.warn("Failed to auto-start screen capture");
+        this.addSystemMessage("⚠️ Screen capture unavailable. Sending message without screen context.");
+        this.setButtonThinking(false);
+      }
+    }
+    
+    // Capture frame if capture is active
+    if (window.webrtcManager.isCaptureActive()) {
+      frameData = window.webrtcManager.captureFrame();
+      console.log(
+        "Captured frame with message:",
+        frameData ? "Success" : "Failed"
+      );
+    }
+
+    // Send message with frame data to backend
+    window.websocketManager.sendChatMessage(message, frameData);
 
     this.chatInput.value = "";
 
@@ -101,6 +129,8 @@ class ChatManager {
 
   handleAIResponse(message) {
     this.addMessage(message, "ai");
+    // Restore button state after receiving response
+    this.setButtonThinking(false);
   }
 
   speak(text) {
@@ -193,6 +223,18 @@ class ChatManager {
 
   addSystemMessage(text) {
     this.addMessage(text, "system");
+  }
+
+  setButtonThinking(isThinking) {
+    if (isThinking) {
+      this.sendBtn.disabled = true;
+      this.sendBtn.textContent = "Thinking...";
+      this.sendBtn.classList.add("btn-thinking");
+    } else {
+      this.sendBtn.disabled = false;
+      this.sendBtn.textContent = "Send";
+      this.sendBtn.classList.remove("btn-thinking");
+    }
   }
 }
 

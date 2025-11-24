@@ -120,12 +120,22 @@ class WebSocketManager {
     });
   }
 
-  sendChatMessage(message) {
-    return this.send({
+  sendChatMessage(message, frameData = null) {
+    const payload = {
       type: "chat",
       message: message,
       timestamp: new Date().toISOString(),
-    });
+    };
+
+    // Include frame data if provided
+    if (frameData) {
+      payload.frameData = frameData;
+      console.log("Sending message with screen frame (frameData included)");
+    } else {
+      console.log("Sending message without screen frame");
+    }
+
+    return this.send(payload);
   }
 
   sendSessionData(sessionData) {

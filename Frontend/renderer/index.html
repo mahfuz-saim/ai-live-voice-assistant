@@ -45,7 +45,6 @@
 
           <!-- Frame Rate Info -->
           <div class="info">
-            <p><strong>Frame Rate:</strong> <span id="frameRate">1-2 FPS</span></p>
             <p><strong>Connection:</strong> <span id="connectionStatus">Disconnected</span></p>
           </div>
         </div>
@@ -82,6 +81,27 @@
           </div>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- Floating Overlay for Screen Sharing Mode -->
+  <div id="floatingOverlay" class="floating-overlay hidden">
+    <!-- Countdown Timer -->
+    <div id="countdownTimer" class="countdown-timer hidden">
+      <div class="countdown-number">3</div>
+    </div>
+
+    <!-- Floating Control Bar -->
+    <div class="floating-control-bar">
+      <input 
+        type="text" 
+        id="floatingChatInput" 
+        class="floating-chat-input" 
+        placeholder="Ask a question or press Send to capture screen..."
+        autocomplete="off"
+      />
+      <button id="floatingSendBtn" class="floating-btn floating-btn-send">📤 Send</button>
+      <button id="floatingStopBtn" class="floating-btn floating-btn-stop">⏹️ Stop</button>
     </div>
   </div>
 
