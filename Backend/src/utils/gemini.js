@@ -19,7 +19,6 @@ const ai = new GoogleGenAI({
 export function getGeminiModelName(withVision = false) {
   // gemini-2.5-flash supports both text and vision
   const modelName = "gemini-2.5-flash";
-  console.log(`🤖 [Gemini] Using model: ${modelName}`);
   return modelName;
 }
 
@@ -72,16 +71,6 @@ export async function analyzeScreenFrame(
   imageFormat = "jpeg"
 ) {
   try {
-    console.log(`🔍 [Gemini] Starting screen analysis...`);
-    console.log(`🔍 [Gemini] Image format: ${imageFormat}`);
-    console.log(
-      `🔍 [Gemini] Base64 data length: ${base64Image.length} characters`
-    );
-    console.log(
-      `🔍 [Gemini] Estimated image size: ${Math.round(
-        base64Image.length / 1024
-      )}KB`
-    );
 
     // Use gemini-2.5-flash (supports both text and vision)
     const modelName = getGeminiModelName(true);
@@ -124,14 +113,10 @@ Your response:`;
       mimeType = "image/jpeg";
     }
 
-    console.log(`🔍 [Gemini] Using MIME type: ${mimeType}`);
-
     // Validate base64 data
     if (!base64Image || base64Image.trim() === "") {
       throw new Error("Base64 image data is empty");
     }
-
-    console.log(`🔍 [Gemini] Sending request to Gemini API...`);
 
     // Use new SDK format with inline data
     const response = await ai.models.generateContent({
@@ -151,13 +136,8 @@ Your response:`;
       ],
     });
 
-    console.log(`🔍 [Gemini] Received response from Gemini API`);
     const responseText = response.text;
-
-    console.log(
-      `✅ [Gemini] Analysis complete. Response length: ${responseText.length} characters`
-    );
-
+    
     return responseText;
   } catch (error) {
     console.error("❌ [Gemini] Error analyzing screen frame:", error);

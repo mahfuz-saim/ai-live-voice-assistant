@@ -24,7 +24,6 @@ app.use(express.urlencoded({ extended: true, limit: "50mb" })); // Parse URL-enc
 
 // Request logging middleware
 app.use((req, res, next) => {
-  console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
   next();
 });
 
@@ -94,38 +93,8 @@ initializeWebSocket(wss);
 
 // Start server
 server.listen(PORT, () => {
-  console.log("╔══════════════════════════════════════════════════════════╗");
-  console.log("║                                                          ║");
-  console.log("║   🤖 Real-Time AI Voice Assistant Backend               ║");
-  console.log("║                                                          ║");
-  console.log("╚══════════════════════════════════════════════════════════╝");
-  console.log("");
-  console.log(`✅ HTTP Server running on: http://localhost:${PORT}`);
-  console.log(`✅ WebSocket Server running on: ws://localhost:${PORT}/ws`);
-  console.log("");
-  console.log("📡 Available Endpoints:");
-  console.log(`   - GET    /                      - API information`);
-  console.log(`   - GET    /status                - Server status`);
-  console.log(`   - POST   /chat                  - Send chat message`);
-  console.log(`   - POST   /chat/analyze          - Analyze content`);
-  console.log(`   - POST   /save-session          - Save session`);
-  console.log(`   - GET    /sessions/:id          - Get session by ID`);
-  console.log(`   - GET    /sessions/user/:userId - Get user sessions`);
-  console.log(`   - PUT    /sessions/:id          - Update session`);
-  console.log(`   - DELETE /sessions/:id          - Delete session`);
-  console.log(`   - POST   /users                 - Create user`);
-  console.log(`   - GET    /users/:id             - Get user by ID`);
-  console.log("");
-  console.log("🌐 WebSocket Messages:");
-  console.log("   - screen_frame    - Send screen for analysis");
-  console.log("   - chat_message    - Send chat message");
-  console.log("   - set_goal        - Set user goal");
-  console.log("   - update_metadata - Update session metadata");
-  console.log("   - get_history     - Get conversation history");
-  console.log("   - ping            - Keep connection alive");
-  console.log("");
-  console.log("💡 Press Ctrl+C to stop the server");
-  console.log("");
+  console.log(`HTTP Server running on: http://localhost:${PORT}`);
+  console.log(`WebSocket Server running on: ws://localhost:${PORT}/ws`);
 });
 
 // Graceful shutdown

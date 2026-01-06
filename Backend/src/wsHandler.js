@@ -21,26 +21,23 @@ const FRAME_COMPARISON_CONFIG = {
  * @param {WebSocketServer} wss - WebSocket server instance
  */
 export function initializeWebSocket(wss) {
-  console.log("✅ WebSocket server initialized");
-
   wss.on("connection", (ws, req) => {
     // Generate unique session ID for this connection
     const sessionId = generateSessionId();
-    console.log(`🔌 New WebSocket connection: ${sessionId}`);
 
     // Initialize session data for this client
     activeSessions.set(sessionId, {
       ws,
       conversationHistory: [],
       screenHistory: [],
-      stepHistory: [], // Track completed steps
+      stepHistory: [], 
       userGoal: "",
-      isFirstMessage: true, // Flag to identify first message for goal extraction
+      isFirstMessage: true,
       metadata: {},
       connectedAt: new Date(),
-      lastFrameData: null, // Store last analyzed frame for comparison
-      lastFrameTimestamp: null, // Timestamp of last frame analysis
-      pendingFrame: null, // Store pending frame for interval-based analysis
+      lastFrameData: null, 
+      lastFrameTimestamp: null,
+      pendingFrame: null, 
     });
 
     // Send connection acknowledgment
@@ -56,9 +53,6 @@ export function initializeWebSocket(wss) {
     ws.on("message", async (data) => {
       try {
         const message = JSON.parse(data.toString());
-        console.log(
-          `📨 Received message type: ${message.type} from ${sessionId}`
-        );
         await handleWebSocketMessage(sessionId, message);
       } catch (error) {
         console.error("Error handling WebSocket message:", error);
@@ -75,7 +69,6 @@ export function initializeWebSocket(wss) {
 
     // Handle client disconnect
     ws.on("close", () => {
-      console.log(`🔌 WebSocket disconnected: ${sessionId}`);
       activeSessions.delete(sessionId);
     });
 
@@ -115,8 +108,6 @@ async function handleWebSocketMessage(sessionId, message) {
 
   switch (message.type) {
     case "connection":
-      // Handle client connection message - just acknowledge
-      console.log(`🤝 Client connection acknowledged for ${sessionId}`);
       // Don't send response to avoid cluttering the frontend
       break;
 
@@ -263,12 +254,6 @@ async function handleScreenFrame(sessionId, message) {
       return;
     }
 
-    // Log frame info for debugging
-    const frameSizeKB = Math.round(base64Image.length / 1024);
-    console.log(`📸 Processing frame: ${frameSizeKB}KB`);
-    console.log(`📏 Base64 length: ${base64Image.length} characters`);
-    console.log(`🎯 User goal: ${userGoal || "Not set"}`);
-
     // Detect image format from base64 header or assume JPEG
     let imageFormat = "jpeg"; // Default to JPEG as frontend sends JPEG
     if (frameData.includes("data:image/")) {
@@ -279,15 +264,11 @@ async function handleScreenFrame(sessionId, message) {
       )
         imageFormat = "jpeg";
     }
-    console.log(`🖼️ Image format detected: ${imageFormat}`);
 
     // Check if frame should be analyzed (time-based + similarity check)
     const shouldAnalyze = await shouldAnalyzeFrame(session, base64Image);
 
     if (!shouldAnalyze) {
-      // Frame is too similar or too soon - skip analysis to save API calls
-      console.log(`⏭️ Skipping frame analysis - no significant change`);
-
       // Send status update to frontend (optional)
       ws.send(
         JSON.stringify({
@@ -300,7 +281,6 @@ async function handleScreenFrame(sessionId, message) {
     }
 
     // Analyze the screen frame with Gemini
-    console.log(`🤖 Sending frame to Gemini AI for analysis...`);
     const guidance = await analyzeScreenFrame(
       base64Image,
       userGoal || "Assist user with their current task",
@@ -330,7 +310,6 @@ async function handleScreenFrame(sessionId, message) {
       })
     );
 
-    console.log(`✅ Screen frame analyzed successfully for ${sessionId}`);
   } catch (error) {
     console.error("❌ Error analyzing screen frame:", error);
     console.error("Error name:", error.name);
@@ -412,14 +391,13 @@ async function handleChatMessage(sessionId, message) {
     // Extract frame data if provided
     let base64Image = null;
     if (message.frameData) {
-      console.log("📸 Frame data received with chat message");
       // Remove data URL prefix if present
       base64Image = message.frameData;
       if (base64Image.includes("base64,")) {
         base64Image = base64Image.split("base64,")[1];
       }
     } else {
-      console.log("⚠️ No frame data in chat message");
+      console.error("⚠️ No frame data in chat message");
     }
 
     // Add user message to conversation history
@@ -453,7 +431,6 @@ async function handleChatMessage(sessionId, message) {
     if (isFirstMessage) {
       session.userGoal = chatContent; // Store the user's first message as the goal
       session.isFirstMessage = false;
-      console.log(`🎯 Goal set for session ${sessionId}: ${chatContent}`);
     }
 
     // Add the response to step history (it contains the action step)
@@ -476,7 +453,6 @@ async function handleChatMessage(sessionId, message) {
       })
     );
 
-    console.log(`✅ Chat message processed successfully for ${sessionId}`);
   } catch (error) {
     console.error("❌ Error handling chat message:", error);
     ws.send(
@@ -529,15 +505,11 @@ async function compareFrames(frame1Base64, frame2Base64) {
 
     // If conversion failed, assume frames are different (safer approach)
     if (!png1 || !png2) {
-      console.log("🔄 Frame comparison skipped - conversion failed");
       return { isDifferent: true, diffPixels: -1 };
     }
 
     // Check if dimensions match
     if (png1.width !== png2.width || png1.height !== png2.height) {
-      console.log(
-        `🔄 Frame dimensions changed: ${png1.width}x${png1.height} -> ${png2.width}x${png2.height}`
-      );
       return { isDifferent: true, diffPixels: -1 };
     }
 
@@ -555,13 +527,6 @@ async function compareFrames(frame1Base64, frame2Base64) {
       {
         threshold: FRAME_COMPARISON_CONFIG.threshold,
       }
-    );
-
-    const totalPixels = width * height;
-    const diffPercentage = ((numDiffPixels / totalPixels) * 100).toFixed(2);
-
-    console.log(
-      `🔍 Frame comparison: ${numDiffPixels} different pixels (${diffPercentage}%)`
     );
 
     const isDifferent =
@@ -586,16 +551,12 @@ async function shouldAnalyzeFrame(session, currentFrameBase64) {
 
   // If no previous frame, always analyze
   if (!session.lastFrameData) {
-    console.log("✅ First frame - will analyze");
     return true;
   }
 
   // Check if enough time has passed since last analysis
   const timeSinceLastAnalysis = now - (session.lastFrameTimestamp || 0);
   if (timeSinceLastAnalysis < FRAME_COMPARISON_CONFIG.checkIntervalMs) {
-    console.log(
-      `⏳ Skipping - only ${timeSinceLastAnalysis}ms since last analysis (min: ${FRAME_COMPARISON_CONFIG.checkIntervalMs}ms)`
-    );
     return false;
   }
 
@@ -606,10 +567,9 @@ async function shouldAnalyzeFrame(session, currentFrameBase64) {
   );
 
   if (isDifferent) {
-    console.log(`✅ Frame changed (${diffPixels} pixels) - will analyze`);
     return true;
   } else {
-    console.log(`⏭️ Frame unchanged - skipping analysis`);
+    console.error(`⏭️ Frame unchanged - skipping analysis`);
     return false;
   }
 }
