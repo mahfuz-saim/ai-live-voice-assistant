@@ -207,6 +207,9 @@ class WebSocketManager {
   }
 }
 
-window.websocketManager = new WebSocketManager();
-
-console.log("WebSocket Manager initialized");
+if (typeof module !== 'undefined') {
+  module.exports = { WebSocketManager };
+} else {
+  window.websocketManager = new WebSocketManager();
+  console.log("WebSocket Manager initialized");
+}

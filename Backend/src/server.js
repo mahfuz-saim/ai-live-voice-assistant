@@ -91,11 +91,14 @@ const wss = new WebSocketServer({
 // Initialize WebSocket handlers
 initializeWebSocket(wss);
 
-// Start server
-server.listen(PORT, () => {
-  console.log(`HTTP Server running on: http://localhost:${PORT}`);
-  console.log(`WebSocket Server running on: ws://localhost:${PORT}/ws`);
-});
+// Start server only if run directly
+import { fileURLToPath } from "url";
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  server.listen(PORT, () => {
+    console.log(`HTTP Server running on: http://localhost:${PORT}`);
+    console.log(`WebSocket Server running on: ws://localhost:${PORT}/ws`);
+  });
+}
 
 // Graceful shutdown
 process.on("SIGTERM", () => {

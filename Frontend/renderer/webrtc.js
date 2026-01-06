@@ -5,7 +5,7 @@ class WebRTCManager {
     this.stream = null;
     this.videoElement = document.getElementById("screenPreview");
     this.canvas = document.getElementById("captureCanvas");
-    this.ctx = this.canvas.getContext("2d");
+    this.ctx = this.canvas ? this.canvas.getContext("2d") : null;
     this.isCapturing = false;
     this.isPaused = false;
     this.captureInterval = null;
@@ -285,6 +285,10 @@ class WebRTCManager {
   }
 }
 
-window.webrtcManager = new WebRTCManager();
-
-console.log("WebRTC Manager initialized");
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = { WebRTCManager };
+} else {
+  // Only auto-instantiate in browser
+  window.webrtcManager = new WebRTCManager();
+  console.log("WebRTC Manager initialized");
+}

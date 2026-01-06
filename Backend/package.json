@@ -6,10 +6,18 @@
   "scripts": {
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
-    "test": "node test-api.js",
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
     "db:generate": "drizzle-kit generate:pg",
     "db:push": "drizzle-kit push:pg",
     "db:migrate": "node src/db/migrate.js"
+  },
+  "type": "module",
+  "jest": {
+    "testEnvironment": "node",
+    "transform": {},
+    "extensionsToTreatAsEsm": [
+      ".jsx"
+    ]
   },
   "keywords": [
     "ai",
@@ -33,7 +41,10 @@
     "ws": "^8.18.0"
   },
   "devDependencies": {
+    "@jest/globals": "^30.2.0",
     "drizzle-kit": "^0.28.1",
-    "nodemon": "^3.1.9"
+    "jest": "^30.2.0",
+    "nodemon": "^3.1.9",
+    "supertest": "^7.2.2"
   }
 }

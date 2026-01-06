@@ -238,6 +238,9 @@ class ChatManager {
   }
 }
 
-window.chatManager = new ChatManager();
-
-console.log("Chat Manager initialized");
+if (typeof module !== 'undefined') {
+  module.exports = { ChatManager };
+} else {
+  window.chatManager = new ChatManager();
+  console.log("Chat Manager initialized");
+}
