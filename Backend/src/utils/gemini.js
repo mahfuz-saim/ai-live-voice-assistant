@@ -19,7 +19,6 @@ const ai = new GoogleGenAI({
 export function getGeminiModelName(withVision = false) {
   // gemini-2.5-flash supports both text and vision
   const modelName = "gemini-2.5-flash";
-  console.log(`🤖 [Gemini] Using model: ${modelName}`);
   return modelName;
 }
 
@@ -72,16 +71,6 @@ export async function analyzeScreenFrame(
   imageFormat = "jpeg"
 ) {
   try {
-    console.log(`🔍 [Gemini] Starting screen analysis...`);
-    console.log(`🔍 [Gemini] Image format: ${imageFormat}`);
-    console.log(
-      `🔍 [Gemini] Base64 data length: ${base64Image.length} characters`
-    );
-    console.log(
-      `🔍 [Gemini] Estimated image size: ${Math.round(
-        base64Image.length / 1024
-      )}KB`
-    );
 
     // Use gemini-2.5-flash (supports both text and vision)
     const modelName = getGeminiModelName(true);
@@ -104,7 +93,14 @@ ${
     : ""
 }
 
-Analyze the screen image and provide clear, concise guidance on what the user should do next. Be specific about which UI elements to click or interact with. Keep your response brief and actionable (2-3 sentences max).`;
+Analyze the screen image and provide ONE clear, concise action step. Tell the user EXACTLY what to click or do next. Keep your response to a SINGLE sentence (maximum 15 words). Be specific about UI elements.
+
+Example responses:
+- "Click the Chrome icon on your taskbar."
+- "Type 'google.com' in the address bar and press Enter."
+- "Click the search box in the center of the page."
+
+Your response:`;
 
     // Determine correct MIME type
     let mimeType = "image/jpeg"; // Default to JPEG
@@ -117,14 +113,10 @@ Analyze the screen image and provide clear, concise guidance on what the user sh
       mimeType = "image/jpeg";
     }
 
-    console.log(`🔍 [Gemini] Using MIME type: ${mimeType}`);
-
     // Validate base64 data
     if (!base64Image || base64Image.trim() === "") {
       throw new Error("Base64 image data is empty");
     }
-
-    console.log(`🔍 [Gemini] Sending request to Gemini API...`);
 
     // Use new SDK format with inline data
     const response = await ai.models.generateContent({
@@ -144,13 +136,8 @@ Analyze the screen image and provide clear, concise guidance on what the user sh
       ],
     });
 
-    console.log(`🔍 [Gemini] Received response from Gemini API`);
     const responseText = response.text;
-
-    console.log(
-      `✅ [Gemini] Analysis complete. Response length: ${responseText.length} characters`
-    );
-
+    
     return responseText;
   } catch (error) {
     console.error("❌ [Gemini] Error analyzing screen frame:", error);
@@ -188,6 +175,8 @@ Analyze the screen image and provide clear, concise guidance on what the user sh
  * @param {string} params.base64Image - Screen capture (optional)
  * @param {Array} params.conversationHistory - Conversation context
  * @param {string} params.userGoal - User's current goal
+ * @param {Array} params.stepHistory - Array of completed steps
+ * @param {boolean} params.isFirstMessage - Whether this is the first message
  * @returns {Promise<string>} - AI response
  */
 export async function getContextualResponse({
@@ -195,28 +184,54 @@ export async function getContextualResponse({
   base64Image,
   conversationHistory = [],
   userGoal,
+  stepHistory = [],
+  isFirstMessage = false,
 }) {
   try {
     // Use gemini-2.5-flash (supports both text and vision)
     const modelName = getGeminiModelName();
 
-    // Build comprehensive prompt
-    let prompt = `You are a helpful AI voice assistant guiding a user through tasks on their computer.
+    let prompt = "";
 
-User's Goal: ${userGoal || "General assistance"}
+    // Handle first message - extract and confirm goal
+    if (isFirstMessage) {
+      prompt = `The user is starting a new task assistance session. Their first message is: "${message}"
+
+Extract their goal from this message and respond with:
+1. A brief confirmation of their goal (one sentence)
+2. The FIRST specific action step they should take (one sentence, maximum 15 words)
+
+Example:
+User: "I want to search for weather on Google"
+Response: "I'll help you search for weather on Google. Click the Chrome icon on your taskbar."
+
+Your response:`;
+    } else {
+      // Subsequent messages - provide next step based on screen and history
+      prompt = `You are helping a user accomplish this goal: ${userGoal || "General assistance"}
 
 `;
 
-    // Add conversation history
-    if (conversationHistory.length > 0) {
-      prompt += "Conversation History:\n";
-      conversationHistory.slice(-5).forEach((msg) => {
-        prompt += `${msg.role}: ${msg.content}\n`;
-      });
-      prompt += "\n";
-    }
+      // Add step history if available
+      if (stepHistory.length > 0) {
+        prompt += `Steps completed so far:\n`;
+        stepHistory.slice(-3).forEach((step, index) => {
+          prompt += `${index + 1}. ${step}\n`;
+        });
+        prompt += "\n";
+      }
 
-    prompt += `Current User Message: ${message}\n\nProvide a helpful, concise response that guides the user toward their goal. If they're asking about what's on the screen, describe what you see and suggest next steps.`;
+      prompt += `User's current message: "${message}"
+
+Based on the screen image, provide the NEXT specific action step. Keep it to ONE sentence (maximum 15 words). Tell them exactly what to click or do.
+
+Example responses:
+- "Click the search box and type 'weather'."
+- "Press Enter to search."
+- "Click the first search result."
+
+Your response:`;
+    }
 
     let contents = [];
 

@@ -1,10 +1,3 @@
-// chat.js - Chat Interface and Text-to-Speech Module
-// This module handles chat UI, message display, and TTS functionality
-
-/**
- * Chat Manager Class
- * Manages chat interface, messages, and text-to-speech
- */
 class ChatManager {
   constructor() {
     this.chatMessages = document.getElementById("chatMessages");
@@ -14,16 +7,11 @@ class ChatManager {
     this.ttsEnabled = true;
     this.synthesis = window.speechSynthesis;
 
-    // Initialize local storage for session
     this.initializeSession();
 
-    // Set up event listeners
     this.setupEventListeners();
   }
 
-  /**
-   * Initialize session from local storage
-   */
   initializeSession() {
     try {
       const savedSession = localStorage.getItem("aiAssistantSession");
@@ -31,7 +19,6 @@ class ChatManager {
         const session = JSON.parse(savedSession);
         this.messageHistory = session.messages || [];
 
-        // Restore messages to UI (optional)
         console.log("Session restored from local storage");
       } else {
         this.messageHistory = [];
@@ -42,9 +29,6 @@ class ChatManager {
     }
   }
 
-  /**
-   * Save session to local storage
-   */
   saveSessionToLocalStorage() {
     try {
       const session = {
@@ -61,16 +45,11 @@ class ChatManager {
     }
   }
 
-  /**
-   * Set up event listeners for chat interface
-   */
   setupEventListeners() {
-    // Send button click
     this.sendBtn.addEventListener("click", () => {
       this.sendMessage();
     });
 
-    // Enter key to send message
     this.chatInput.addEventListener("keypress", (e) => {
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
@@ -79,36 +58,51 @@ class ChatManager {
     });
   }
 
-  /**
-   * Send a chat message
-   */
-  sendMessage() {
+  async sendMessage() {
     const message = this.chatInput.value.trim();
 
     if (!message) {
       return;
     }
 
-    // Display user message
     this.addMessage(message, "user");
 
-    // Send to backend via WebSocket
-    window.websocketManager.sendChatMessage(message);
+    // Set button to thinking state
+    this.setButtonThinking(true);
 
-    // Clear input
+    // Always capture screen frame - auto-start capture if not active
+    let frameData = null;
+    
+    // Check if screen capture is active
+    if (!window.webrtcManager.isCaptureActive()) {
+      console.log("Screen capture not active, starting automatically...");
+      // Start capture silently
+      const success = await window.webrtcManager.startCapture();
+      if (!success) {
+        console.warn("Failed to auto-start screen capture");
+        this.addSystemMessage("⚠️ Screen capture unavailable. Sending message without screen context.");
+        this.setButtonThinking(false);
+      }
+    }
+    
+    // Capture frame if capture is active
+    if (window.webrtcManager.isCaptureActive()) {
+      frameData = window.webrtcManager.captureFrame();
+      console.log(
+        "Captured frame with message:",
+        frameData ? "Success" : "Failed"
+      );
+    }
+
+    // Send message with frame data to backend
+    window.websocketManager.sendChatMessage(message, frameData);
+
     this.chatInput.value = "";
 
-    // Save to session
     this.saveSessionToLocalStorage();
   }
 
-  /**
-   * Add a message to the chat interface
-   * @param {String} text - Message text
-   * @param {String} type - Message type: 'user', 'ai', or 'system'
-   */
   addMessage(text, type = "ai") {
-    // Create message element
     const messageDiv = document.createElement("div");
     messageDiv.className = `message ${type}-message`;
 
@@ -116,54 +110,39 @@ class ChatManager {
     messageParagraph.textContent = text;
     messageDiv.appendChild(messageParagraph);
 
-    // Add to chat container
     this.chatMessages.appendChild(messageDiv);
 
-    // Scroll to bottom
     this.chatMessages.scrollTop = this.chatMessages.scrollHeight;
 
-    // Add to history
     this.messageHistory.push({
       text: text,
       type: type,
       timestamp: new Date().toISOString(),
     });
 
-    // If AI message, speak it using TTS
     if (type === "ai" && this.ttsEnabled) {
       this.speak(text);
     }
 
-    // Save session after adding message
     this.saveSessionToLocalStorage();
   }
 
-  /**
-   * Handle incoming AI response
-   * @param {String} message - AI response message
-   */
   handleAIResponse(message) {
     this.addMessage(message, "ai");
+    // Restore button state after receiving response
+    this.setButtonThinking(false);
   }
 
-  /**
-   * Speak text using Text-to-Speech
-   * @param {String} text - Text to speak
-   */
   speak(text) {
     try {
-      // Cancel any ongoing speech
       this.synthesis.cancel();
 
-      // Create speech utterance
       const utterance = new SpeechSynthesisUtterance(text);
 
-      // Configure voice settings
-      utterance.rate = 1.0; // Normal speed
-      utterance.pitch = 1.0; // Normal pitch
-      utterance.volume = 1.0; // Full volume
+      utterance.rate = 1.0;
+      utterance.pitch = 1.0;
+      utterance.volume = 1.0;
 
-      // Try to select a good voice (prefer English voices)
       const voices = this.synthesis.getVoices();
       const englishVoice =
         voices.find(
@@ -177,7 +156,6 @@ class ChatManager {
         utterance.voice = englishVoice;
       }
 
-      // Event listeners for speech
       utterance.onstart = () => {
         console.log("TTS started");
       };
@@ -190,51 +168,35 @@ class ChatManager {
         console.error("TTS error:", event);
       };
 
-      // Speak the text
       this.synthesis.speak(utterance);
     } catch (error) {
       console.error("Error with text-to-speech:", error);
     }
   }
 
-  /**
-   * Stop current speech
-   */
   stopSpeaking() {
     this.synthesis.cancel();
   }
 
-  /**
-   * Toggle TTS on/off
-   */
   toggleTTS() {
     this.ttsEnabled = !this.ttsEnabled;
     console.log("TTS enabled:", this.ttsEnabled);
     return this.ttsEnabled;
   }
 
-  /**
-   * Clear all chat messages
-   */
   clearChat() {
-    // Remove all messages except system messages
     const messages = this.chatMessages.querySelectorAll(
       ".message:not(.system-message)"
     );
     messages.forEach((msg) => msg.remove());
 
-    // Clear history
     this.messageHistory = [];
 
-    // Save empty session
     this.saveSessionToLocalStorage();
 
     console.log("Chat cleared");
   }
 
-  /**
-   * Get current session data for saving to backend
-   */
   getSessionData() {
     return {
       messages: this.messageHistory,
@@ -245,9 +207,6 @@ class ChatManager {
     };
   }
 
-  /**
-   * Calculate session duration based on first and last message
-   */
   calculateSessionDuration() {
     if (this.messageHistory.length === 0) {
       return 0;
@@ -259,18 +218,29 @@ class ChatManager {
     const start = new Date(firstMessage.timestamp);
     const end = new Date(lastMessage.timestamp);
 
-    return Math.floor((end - start) / 1000); // Duration in seconds
+    return Math.floor((end - start) / 1000);
   }
 
-  /**
-   * Add system notification message
-   */
   addSystemMessage(text) {
     this.addMessage(text, "system");
   }
+
+  setButtonThinking(isThinking) {
+    if (isThinking) {
+      this.sendBtn.disabled = true;
+      this.sendBtn.textContent = "Thinking...";
+      this.sendBtn.classList.add("btn-thinking");
+    } else {
+      this.sendBtn.disabled = false;
+      this.sendBtn.textContent = "Send";
+      this.sendBtn.classList.remove("btn-thinking");
+    }
+  }
 }
 
-// Create global instance
-window.chatManager = new ChatManager();
-
-console.log("Chat Manager initialized");
+if (typeof module !== 'undefined') {
+  module.exports = { ChatManager };
+} else {
+  window.chatManager = new ChatManager();
+  console.log("Chat Manager initialized");
+}

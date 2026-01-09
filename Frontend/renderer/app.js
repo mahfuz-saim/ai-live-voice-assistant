@@ -1,18 +1,10 @@
-// app.js - Main Application Logic
-// This file coordinates all modules and handles UI interactions
-
-/**
- * Application State
- */
 const AppState = {
   isScreenSharing: false,
   isConnected: false,
   isPaused: false,
+  isFloatingMode: false,
 };
 
-/**
- * UI Elements
- */
 const UI = {
   startBtn: document.getElementById("startBtn"),
   pauseBtn: document.getElementById("pauseBtn"),
@@ -23,70 +15,67 @@ const UI = {
   statusText: document.getElementById("statusText"),
   connectionStatus: document.getElementById("connectionStatus"),
   frameRate: document.getElementById("frameRate"),
+  container: document.querySelector(".container"),
+  floatingOverlay: document.getElementById("floatingOverlay"),
+  floatingChatInput: document.getElementById("floatingChatInput"),
+  floatingSendBtn: document.getElementById("floatingSendBtn"),
+  floatingStopBtn: document.getElementById("floatingStopBtn"),
+  countdownTimer: document.getElementById("countdownTimer"),
 };
 
-/**
- * Initialize application
- */
 function initializeApp() {
-  console.log("Initializing AI Voice Assistant...");
-
-  // Set up button event listeners
   setupButtonListeners();
 
-  // Connect to WebSocket
   window.websocketManager.connect();
 
-  // Set up WebSocket message handler
   window.websocketManager.onMessage(handleWebSocketMessage);
 
-  // Set up WebSocket status handler
   window.websocketManager.onStatusChange(handleConnectionStatus);
 
-  // Set up WebRTC frame capture callback
-  window.webrtcManager.onFrameCaptured(handleFrameCaptured);
+  // Listen for messages from floating window
+  if (typeof require !== "undefined") {
+    const { ipcRenderer } = require("electron");
 
-  // Load voices for TTS (may need time to load)
-  if (window.speechSynthesis) {
-    window.speechSynthesis.onvoiceschanged = () => {
-      console.log("TTS voices loaded");
-    };
+    ipcRenderer.on("floating-message", (event, data) => {
+      handleFloatingMessage(data);
+    });
+
+    ipcRenderer.on("floating-stop", () => {
+      stopScreenSharing();
+    });
   }
 
-  console.log("Application initialized successfully");
+  // Removed automatic frame capture handler - frames will be captured on-demand when sending messages
+
+  if (window.speechSynthesis) {
+    window.speechSynthesis.onvoiceschanged = () => {
+      // TTS voices loaded
+    };
+  }
 }
 
-/**
- * Set up button event listeners
- */
 function setupButtonListeners() {
-  // Start button
   UI.startBtn.addEventListener("click", async () => {
-    console.log("Start button clicked");
-
     const success = await window.webrtcManager.startCapture();
 
     if (success) {
       AppState.isScreenSharing = true;
       updateUIForScreenSharing(true);
-      window.chatManager.addSystemMessage(
-        "Screen sharing started. AI assistant is now watching."
-      );
+
+      // Create floating window and minimize main window after a brief delay
+      setTimeout(() => {
+        enterFloatingMode();
+      }, 500);
     }
   });
 
-  // Pause button
   UI.pauseBtn.addEventListener("click", () => {
-    console.log("Pause button clicked");
-
     if (AppState.isPaused) {
-      // Resume
       window.webrtcManager.resumeCapture();
       AppState.isPaused = false;
       UI.pauseBtn.textContent = "⏸️ Pause";
       window.chatManager.addSystemMessage("Screen sharing resumed.");
     } else {
-      // Pause
       window.webrtcManager.pauseCapture();
       AppState.isPaused = true;
       UI.pauseBtn.textContent = "▶️ Resume";
@@ -94,21 +83,11 @@ function setupButtonListeners() {
     }
   });
 
-  // Stop button
   UI.stopBtn.addEventListener("click", () => {
-    console.log("Stop button clicked");
-
-    window.webrtcManager.stopCapture();
-    AppState.isScreenSharing = false;
-    AppState.isPaused = false;
-    updateUIForScreenSharing(false);
-    window.chatManager.addSystemMessage("Screen sharing stopped.");
+    stopScreenSharing();
   });
 
-  // Save Session button
   UI.saveSessionBtn.addEventListener("click", async () => {
-    console.log("Save Session button clicked");
-
     try {
       const sessionData = window.chatManager.getSessionData();
       await window.websocketManager.sendSessionData(sessionData);
@@ -116,7 +95,6 @@ function setupButtonListeners() {
       window.chatManager.addSystemMessage("✅ Session saved successfully!");
       alert("Session saved successfully!");
     } catch (error) {
-      console.error("Failed to save session:", error);
       window.chatManager.addSystemMessage(
         "❌ Failed to save session. Please try again."
       );
@@ -126,10 +104,7 @@ function setupButtonListeners() {
     }
   });
 
-  // Clear Chat button
   UI.clearChatBtn.addEventListener("click", () => {
-    console.log("Clear Chat button clicked");
-
     if (confirm("Are you sure you want to clear all chat messages?")) {
       window.chatManager.clearChat();
       window.chatManager.addSystemMessage(
@@ -139,9 +114,73 @@ function setupButtonListeners() {
   });
 }
 
-/**
- * Update UI based on screen sharing state
- */
+function enterFloatingMode() {
+  AppState.isFloatingMode = true;
+
+  if (typeof require !== "undefined") {
+    const { ipcRenderer } = require("electron");
+
+    // Create the floating window
+    ipcRenderer.send("create-floating-window");
+
+    // Minimize the main window
+    ipcRenderer.send("minimize-main-window");
+  }
+}
+
+function exitFloatingMode() {
+  AppState.isFloatingMode = false;
+
+  if (typeof require !== "undefined") {
+    const { ipcRenderer } = require("electron");
+
+    // Close the floating window
+    ipcRenderer.send("close-floating-window");
+
+    // Restore the main window
+    ipcRenderer.send("restore-main-window");
+  }
+}
+
+async function handleFloatingMessage(data) {
+  const message = data.message;
+
+  // Ensure screen capture is active - auto-start if needed
+  if (!window.webrtcManager.isCaptureActive()) {
+    console.log("Screen capture not active in floating mode, starting automatically...");
+    await window.webrtcManager.startCapture();
+  }
+
+  // Capture the current screen frame
+  let frameData = null;
+  if (window.webrtcManager && window.webrtcManager.isCaptureActive()) {
+    frameData = window.webrtcManager.captureFrame();
+  }
+
+  // Send message with frame data
+  if (message && message !== "Analyze this screen") {
+    window.chatManager.addMessage(message, "user");
+  } else {
+    window.chatManager.addSystemMessage("📸 Screen captured and sent to AI");
+  }
+
+  window.websocketManager.sendChatMessage(message, frameData);
+}
+
+function stopScreenSharing() {
+  window.webrtcManager.stopCapture();
+  AppState.isScreenSharing = false;
+  AppState.isPaused = false;
+
+  // Exit floating mode if active
+  if (AppState.isFloatingMode) {
+    exitFloatingMode();
+  }
+
+  updateUIForScreenSharing(false);
+  window.chatManager.addSystemMessage("Screen sharing stopped.");
+}
+
 function updateUIForScreenSharing(isSharing) {
   if (isSharing) {
     UI.startBtn.disabled = true;
@@ -159,71 +198,42 @@ function updateUIForScreenSharing(isSharing) {
   }
 }
 
-/**
- * Handle captured frames from WebRTC
- */
-function handleFrameCaptured(base64Frame) {
-  // Send frame to backend via WebSocket
-  if (AppState.isConnected) {
-    window.websocketManager.sendFrame(base64Frame);
-  }
-}
+// Removed handleFrameCaptured function - frames are now captured on-demand
 
-/**
- * Handle incoming WebSocket messages
- */
 function handleWebSocketMessage(data) {
-  console.log("Received message:", data);
-
   switch (data.type) {
     case "chat":
     case "response":
-      // AI response message
       if (data.message) {
         window.chatManager.handleAIResponse(data.message);
       }
       break;
 
     case "frame":
-      // Frame data - ignore (we're sending these, not receiving)
-      console.log("Frame message received (ignoring)");
       break;
 
     case "frame_received":
     case "frame_acknowledged":
-      // Frame acknowledgment (optional)
-      console.log("Frame received by backend");
       break;
 
     case "error":
-      // Error message
-      console.error("Backend error:", data.message);
       window.chatManager.addSystemMessage(`⚠️ Error: ${data.message}`);
+      // Restore button state on error
+      window.chatManager.setButtonThinking(false);
       break;
 
     case "status":
-      // Status update
-      console.log("Backend status:", data.message);
       break;
 
     case "connection":
-      // Connection acknowledgment
-      console.log("Connection acknowledged by backend");
       break;
 
     default:
-      // Unknown message type - log to console only, don't show in chat
-      console.warn("Unknown message type:", data.type, data);
       break;
   }
 }
 
-/**
- * Handle WebSocket connection status changes
- */
 function handleConnectionStatus(status) {
-  console.log("Connection status changed:", status);
-
   AppState.isConnected = status === "connected";
 
   switch (status) {
@@ -261,29 +271,18 @@ function handleConnectionStatus(status) {
   }
 }
 
-/**
- * Handle application cleanup on window close
- */
 window.addEventListener("beforeunload", () => {
-  console.log("Application closing, cleaning up...");
-
-  // Stop screen capture
   if (AppState.isScreenSharing) {
     window.webrtcManager.stopCapture();
   }
 
-  // Stop TTS
   window.chatManager.stopSpeaking();
 
-  // Disconnect WebSocket
   window.websocketManager.disconnect();
 });
 
-// Initialize app when DOM is loaded
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", initializeApp);
 } else {
   initializeApp();
 }
-
-console.log("App.js loaded");

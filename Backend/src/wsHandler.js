@@ -2,30 +2,42 @@
 // Handles screen frame streaming and live AI guidance
 
 import { analyzeScreenFrame, getContextualResponse } from "./utils/gemini.js";
+import pixelmatch from "pixelmatch";
+import { PNG } from "pngjs";
+import sharp from "sharp";
 
 // Store active WebSocket clients and their session data
 const activeSessions = new Map();
+
+// Configuration for frame comparison
+const FRAME_COMPARISON_CONFIG = {
+  threshold: 0.1, // Similarity threshold (0-1, lower = more similar required)
+  minDifferentPixels: 1000, // Minimum different pixels to consider frame changed
+  checkIntervalMs: 1000, // Check frames every 1 second
+};
 
 /**
  * Initialize WebSocket server
  * @param {WebSocketServer} wss - WebSocket server instance
  */
 export function initializeWebSocket(wss) {
-  console.log("✅ WebSocket server initialized");
-
   wss.on("connection", (ws, req) => {
     // Generate unique session ID for this connection
     const sessionId = generateSessionId();
-    console.log(`🔌 New WebSocket connection: ${sessionId}`);
 
     // Initialize session data for this client
     activeSessions.set(sessionId, {
       ws,
       conversationHistory: [],
       screenHistory: [],
+      stepHistory: [], 
       userGoal: "",
+      isFirstMessage: true,
       metadata: {},
       connectedAt: new Date(),
+      lastFrameData: null, 
+      lastFrameTimestamp: null,
+      pendingFrame: null, 
     });
 
     // Send connection acknowledgment
@@ -41,9 +53,6 @@ export function initializeWebSocket(wss) {
     ws.on("message", async (data) => {
       try {
         const message = JSON.parse(data.toString());
-        console.log(
-          `📨 Received message type: ${message.type} from ${sessionId}`
-        );
         await handleWebSocketMessage(sessionId, message);
       } catch (error) {
         console.error("Error handling WebSocket message:", error);
@@ -60,7 +69,6 @@ export function initializeWebSocket(wss) {
 
     // Handle client disconnect
     ws.on("close", () => {
-      console.log(`🔌 WebSocket disconnected: ${sessionId}`);
       activeSessions.delete(sessionId);
     });
 
@@ -100,8 +108,6 @@ async function handleWebSocketMessage(sessionId, message) {
 
   switch (message.type) {
     case "connection":
-      // Handle client connection message - just acknowledge
-      console.log(`🤝 Client connection acknowledged for ${sessionId}`);
       // Don't send response to avoid cluttering the frontend
       break;
 
@@ -248,12 +254,6 @@ async function handleScreenFrame(sessionId, message) {
       return;
     }
 
-    // Log frame info for debugging
-    const frameSizeKB = Math.round(base64Image.length / 1024);
-    console.log(`📸 Processing frame: ${frameSizeKB}KB`);
-    console.log(`📏 Base64 length: ${base64Image.length} characters`);
-    console.log(`🎯 User goal: ${userGoal || "Not set"}`);
-
     // Detect image format from base64 header or assume JPEG
     let imageFormat = "jpeg"; // Default to JPEG as frontend sends JPEG
     if (frameData.includes("data:image/")) {
@@ -264,16 +264,33 @@ async function handleScreenFrame(sessionId, message) {
       )
         imageFormat = "jpeg";
     }
-    console.log(`🖼️ Image format detected: ${imageFormat}`);
+
+    // Check if frame should be analyzed (time-based + similarity check)
+    const shouldAnalyze = await shouldAnalyzeFrame(session, base64Image);
+
+    if (!shouldAnalyze) {
+      // Send status update to frontend (optional)
+      ws.send(
+        JSON.stringify({
+          type: "status",
+          message: "Frame unchanged - skipping analysis",
+          timestamp: new Date().toISOString(),
+        })
+      );
+      return;
+    }
 
     // Analyze the screen frame with Gemini
-    console.log(`🤖 Sending frame to Gemini AI for analysis...`);
     const guidance = await analyzeScreenFrame(
       base64Image,
       userGoal || "Assist user with their current task",
       metadata,
       imageFormat // Pass the image format
     );
+
+    // Update last analyzed frame data
+    session.lastFrameData = base64Image;
+    session.lastFrameTimestamp = Date.now();
 
     // Store screen step in history
     const screenStep = {
@@ -293,7 +310,6 @@ async function handleScreenFrame(sessionId, message) {
       })
     );
 
-    console.log(`✅ Screen frame analyzed successfully for ${sessionId}`);
   } catch (error) {
     console.error("❌ Error analyzing screen frame:", error);
     console.error("Error name:", error.name);
@@ -352,7 +368,7 @@ async function handleChatMessage(sessionId, message) {
   const session = activeSessions.get(sessionId);
   if (!session) return;
 
-  const { ws, conversationHistory, userGoal, metadata } = session;
+  const { ws, conversationHistory, userGoal, metadata, stepHistory, isFirstMessage } = session;
 
   try {
     // Handle both 'message' field (frontend format) and 'content' field (legacy format)
@@ -370,6 +386,18 @@ async function handleChatMessage(sessionId, message) {
         })
       );
       return;
+    }
+
+    // Extract frame data if provided
+    let base64Image = null;
+    if (message.frameData) {
+      // Remove data URL prefix if present
+      base64Image = message.frameData;
+      if (base64Image.includes("base64,")) {
+        base64Image = base64Image.split("base64,")[1];
+      }
+    } else {
+      console.error("⚠️ No frame data in chat message");
     }
 
     // Add user message to conversation history
@@ -392,10 +420,21 @@ async function handleChatMessage(sessionId, message) {
     // Get AI response with full context
     const responseText = await getContextualResponse({
       message: chatContent,
-      base64Image: message.includeScreen ? message.screenFrame : null,
+      base64Image: base64Image,
       conversationHistory,
-      userGoal,
+      userGoal: userGoal || chatContent, // Use first message as goal if not set
+      stepHistory: stepHistory,
+      isFirstMessage: isFirstMessage,
     });
+
+    // If this was the first message, extract goal from response and update session
+    if (isFirstMessage) {
+      session.userGoal = chatContent; // Store the user's first message as the goal
+      session.isFirstMessage = false;
+    }
+
+    // Add the response to step history (it contains the action step)
+    stepHistory.push(responseText);
 
     // Add AI response to conversation history
     const aiMessage = {
@@ -414,7 +453,6 @@ async function handleChatMessage(sessionId, message) {
       })
     );
 
-    console.log(`✅ Chat message processed successfully for ${sessionId}`);
   } catch (error) {
     console.error("❌ Error handling chat message:", error);
     ws.send(
@@ -425,6 +463,114 @@ async function handleChatMessage(sessionId, message) {
         timestamp: new Date().toISOString(),
       })
     );
+  }
+}
+
+/**
+ * Convert base64 JPEG/PNG to PNG buffer for comparison
+ * @param {string} base64Image - Base64 encoded image
+ * @returns {Promise<PNG>} - PNG object
+ */
+async function base64ToPNG(base64Image) {
+  try {
+    // Convert base64 to buffer
+    const buffer = Buffer.from(base64Image, "base64");
+
+    // Use sharp to convert any image format (JPEG/PNG) to raw PNG data
+    const pngBuffer = await sharp(buffer)
+      .png() // Convert to PNG format
+      .toBuffer();
+
+    // Parse the PNG buffer
+    const png = PNG.sync.read(pngBuffer);
+    return png;
+  } catch (error) {
+    // If conversion fails, return null
+    console.error("⚠️ Failed to parse image for comparison:", error.message);
+    return null;
+  }
+}
+
+/**
+ * Compare two frames using pixelmatch
+ * @param {string} frame1Base64 - First frame (base64)
+ * @param {string} frame2Base64 - Second frame (base64)
+ * @returns {Promise<{isDifferent: boolean, diffPixels: number}>}
+ */
+async function compareFrames(frame1Base64, frame2Base64) {
+  try {
+    // Convert both frames to PNG
+    const png1 = await base64ToPNG(frame1Base64);
+    const png2 = await base64ToPNG(frame2Base64);
+
+    // If conversion failed, assume frames are different (safer approach)
+    if (!png1 || !png2) {
+      return { isDifferent: true, diffPixels: -1 };
+    }
+
+    // Check if dimensions match
+    if (png1.width !== png2.width || png1.height !== png2.height) {
+      return { isDifferent: true, diffPixels: -1 };
+    }
+
+    // Create diff buffer
+    const { width, height } = png1;
+    const diff = new PNG({ width, height });
+
+    // Compare pixels
+    const numDiffPixels = pixelmatch(
+      png1.data,
+      png2.data,
+      diff.data,
+      width,
+      height,
+      {
+        threshold: FRAME_COMPARISON_CONFIG.threshold,
+      }
+    );
+
+    const isDifferent =
+      numDiffPixels >= FRAME_COMPARISON_CONFIG.minDifferentPixels;
+
+    return { isDifferent, diffPixels: numDiffPixels };
+  } catch (error) {
+    console.error("❌ Error comparing frames:", error.message);
+    // On error, assume frames are different to avoid missing important changes
+    return { isDifferent: true, diffPixels: -1 };
+  }
+}
+
+/**
+ * Check if frame should be analyzed based on time and similarity
+ * @param {Object} session - Session data
+ * @param {string} currentFrameBase64 - Current frame to analyze
+ * @returns {Promise<boolean>} - True if frame should be analyzed
+ */
+async function shouldAnalyzeFrame(session, currentFrameBase64) {
+  const now = Date.now();
+
+  // If no previous frame, always analyze
+  if (!session.lastFrameData) {
+    return true;
+  }
+
+  // Check if enough time has passed since last analysis
+  const timeSinceLastAnalysis = now - (session.lastFrameTimestamp || 0);
+  if (timeSinceLastAnalysis < FRAME_COMPARISON_CONFIG.checkIntervalMs) {
+    return false;
+  }
+
+  // Compare with last analyzed frame
+  const { isDifferent, diffPixels } = await compareFrames(
+    session.lastFrameData,
+    currentFrameBase64
+  );
+
+  if (isDifferent) {
+    return true;
+  } else {
+    console.error(`⏭️ Frame unchanged - skipping analysis`);
+    return false;
   }
 }
 
